@@ -196,6 +196,34 @@ function getLocalizedError(lang: Language, key: 'invalidUrl' | 'noPath' | 'wrong
   return messages[lang]?.[key] || messages.en[key];
 }
 
+function getBackendUnavailableError(lang: Language): string {
+  const messages: Record<Language, string> = {
+    en: 'Backend not reachable — check VITE_API_BASE_URL. The Express backend is not available on static-only hosting.',
+    fr: 'Backend inaccessible — vérifiez VITE_API_BASE_URL. Le serveur Express n’est pas disponible sur un hébergement statique.',
+    es: 'Backend no accesible — revisa VITE_API_BASE_URL. El servidor Express no está disponible en hosting estático.',
+    ar: 'الخادم الخلفي غير متاح — تحقق من VITE_API_BASE_URL. خادم Express غير متاح على الاستضافة الثابتة.',
+  };
+  return messages[lang] || messages.en;
+}
+
+async function resolveTcoUrl(shortUrl: string, signal?: AbortSignal): Promise<string | null> {
+  try {
+    const { signal: timeoutSignal, cleanup } = createLinkedSignal(signal, 10000);
+    try {
+      const res = await fetch(shortUrl, { method: 'GET', redirect: 'follow', signal: timeoutSignal });
+      const finalUrl = res?.url || '';
+      if (finalUrl && finalUrl !== shortUrl && !/^https?:\/\/t\.co\//i.test(finalUrl)) {
+        return finalUrl;
+      }
+      return null;
+    } finally {
+      cleanup();
+    }
+  } catch {
+    return null;
+  }
+}
+
 function createLinkedSignal(callerSignal?: AbortSignal, timeoutMs = 15000): { signal: AbortSignal; cleanup: () => void } {
   const controller = new AbortController();
   const timer = globalThis.setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), timeoutMs);
@@ -340,11 +368,36 @@ async function extractTwitterMedia(cleanUrl: string, lang: Language, signal?: Ab
   const isDirectStreamOrSpace = /\/i\/(?:spaces|broadcasts|events)\//i.test(cleanUrl);
   const isShortTco = /^https?:\/\/t\.co\//i.test(cleanUrl);
 
-  // Direct Space / Broadcast / Event URLs and t.co shortlinks require backend resolution
+  // Direct Space / Broadcast / Event URLs and t.co shortlinks need backend
+  // resolution first — but must NOT throw before the public fallbacks run.
+  // The backend is authoritative for real Spaces/Broadcasts; the fallbacks
+  // below only help when the link actually points at a normal status tweet
+  // (t.co) or when the third-party mirror can resolve the direct URL.
+  let directBackendError: string | undefined;
+  let directBackendUnavailable = false;
   if (isDirectStreamOrSpace || isShortTco) {
-    const { data, backendError } = await callBackendXExtract(cleanUrl, signal);
+    const { data, backendError, backendUnavailable } = await callBackendXExtract(cleanUrl, signal);
     if (data) return data;
-    throw new Error(backendError || getLocalizedError(lang, isShortTco ? 'extractFailed' : 'spacesUnsupported'));
+    directBackendError = backendError;
+    directBackendUnavailable = Boolean(backendUnavailable);
+    if (isShortTco) {
+      // Resolve the shortlink and re-dispatch on the real URL (usually a
+      // normal status URL, which then gets the full Fx/Vx/btch fallbacks).
+      const resolved = await resolveTcoUrl(cleanUrl, signal);
+      if (resolved && resolved !== cleanUrl) {
+        return extractTwitterMedia(resolved, lang, signal);
+      }
+      // Resolution failed: this is a generic extraction failure, not a
+      // Spaces error — the link may not even be a Spaces link.
+      if (directBackendUnavailable) {
+        throw new Error(getBackendUnavailableError(lang));
+      }
+      throw new Error(directBackendError || getLocalizedError(lang, 'extractFailed'));
+    }
+    // Direct Spaces/Broadcast/Event: fall through to the fallbacks below.
+    // There is no status ID in these URLs, so the Fx/Vx status fallbacks
+    // cannot run — the btch fallback in the no-status branch is the last
+    // public attempt, and spacesUnsupported is only thrown after it fails.
   }
 
   const statusMatch = cleanUrl.match(/(?:x\.com|twitter\.com|fxtwitter\.com|vxtwitter\.com|fixupx\.com)\/(?:([^/]+)\/)?status\/(\d+)/i);
@@ -352,6 +405,77 @@ async function extractTwitterMedia(cleanUrl: string, lang: Language, signal?: Ab
   const statusId = statusMatch?.[2];
 
   if (!statusId) {
+    if (isDirectStreamOrSpace) {
+      // Last public attempt for a direct Spaces/Broadcast/Event URL: the
+      // third-party mirror may be able to resolve it to a video.
+      try {
+        const btchData = await fetchJsonWithTimeout(
+          `https://backend1.tioo.eu.org/twitter?url=${encodeURIComponent(cleanUrl)}`,
+          {},
+          signal
+        );
+        const urls: Array<{ hd?: string; sd?: string }> = Array.isArray(btchData?.url) ? btchData.url : [];
+        const hdUrl = urls.find((u) => isValidMediaStreamUrl(u.hd))?.hd;
+        const sdUrl = urls.find((u) => isValidMediaStreamUrl(u.sd))?.sd;
+        const primaryUrl = hdUrl || sdUrl;
+        if (primaryUrl) {
+          const formats: MediaFormat[] = [];
+          if (hdUrl) {
+            formats.push({
+              id: 'tw_btch_hd',
+              label: '1080p / HD MP4',
+              type: 'video',
+              quality: 'HD MP4',
+              sizeMb: 12.0,
+              format: 'MP4',
+              isPopular: true,
+              directUrl: hdUrl,
+            });
+          }
+          if (sdUrl && sdUrl !== hdUrl) {
+            formats.push({
+              id: 'tw_btch_sd',
+              label: 'SD MP4',
+              type: 'video',
+              quality: 'SD MP4',
+              sizeMb: 6.0,
+              format: 'MP4',
+              directUrl: sdUrl,
+            });
+          }
+          const mp3Fmt = buildTwitterMp3Format(sdUrl || primaryUrl, 'x_user', 30);
+          formats.push(mp3Fmt);
+          return {
+            id: `tw_${Date.now()}`,
+            originalUrl: cleanUrl,
+            author: {
+              name: 'X Creator',
+              handle: 'x_user',
+              avatar: 'https://api.dicebear.com/7.x/initials/svg?seed=X',
+              verified: false,
+            },
+            tweetText: btchData.title || 'X / Twitter Video',
+            publishedAt: 'X / Twitter',
+            durationSeconds: 30,
+            viewCount: '—',
+            likeCount: '—',
+            retweetCount: '—',
+            thumbnailUrl: '',
+            videoUrl: primaryUrl,
+            audioUrl: mp3Fmt.directUrl,
+            formats,
+          };
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError' && signal?.aborted) throw err;
+      }
+      // All methods failed — only now is spacesUnsupported the right error
+      // (or a backend-unreachable error, if the backend was never reachable).
+      if (directBackendUnavailable) {
+        throw new Error(getBackendUnavailableError(lang));
+      }
+      throw new Error(directBackendError || getLocalizedError(lang, 'spacesUnsupported'));
+    }
     throw new Error(getLocalizedError(lang, 'noPath'));
   }
 
@@ -546,6 +670,9 @@ async function extractTwitterMedia(cleanUrl: string, lang: Language, signal?: Ab
       };
     }
     if (vxData?.tweetID) {
+      if (backendUnavailable) {
+        throw new Error(getBackendUnavailableError(lang));
+      }
       throw new Error(backendError || getLocalizedError(lang, 'noVideo', 'X / Twitter'));
     }
   } catch (err: any) {
@@ -620,6 +747,9 @@ async function extractTwitterMedia(cleanUrl: string, lang: Language, signal?: Ab
     if (err?.name === 'AbortError' && signal?.aborted) throw err;
   }
 
+  if (backendUnavailable) {
+    throw new Error(getBackendUnavailableError(lang));
+  }
   throw new Error(backendError || getLocalizedError(lang, 'extractFailed'));
 }
 
@@ -871,17 +1001,29 @@ async function extractMetaPlatformMedia(
   const endpoint = platform === 'instagram' ? 'igdl' : platform === 'facebook' ? 'fbdown' : 'threads';
 
   let backendErrorMsg: string | undefined;
+  let backendWasUnavailable = false;
 
   // For Threads, our backend SSR/JSON extractor is authoritative (tioo frequently fails on Threads posts)
   if (platform === 'threads') {
-    const { data, backendError } = await callBackendXExtract(cleanUrl, signal);
+    const { data, backendError, backendUnavailable } = await callBackendXExtract(cleanUrl, signal);
     if (data) return data;
+    if (backendUnavailable) backendWasUnavailable = true;
     if (backendError) {
       throw new Error(backendError);
     }
   }
 
-  // Try btch browser endpoint (primary for IG/FB, fallback for Threads if backend unavailable)
+  // For Instagram, the backend is authoritative: it now tries btch.igdl,
+  // then the ddinstagram / instagram embed HTML, then an authenticated
+  // session (IG_SESSIONID) when configured. tioo is only a last resort.
+  if (platform === 'instagram') {
+    const { data, backendError, backendUnavailable } = await callBackendXExtract(cleanUrl, signal);
+    if (data) return data;
+    if (backendUnavailable) backendWasUnavailable = true;
+    if (backendError) backendErrorMsg = backendError;
+  }
+
+  // Try btch browser endpoint (primary for FB, last resort for IG/Threads if backend unavailable)
   try {
     const raw = await fetchJsonWithTimeout(
       `https://backend1.tioo.eu.org/${endpoint}?url=${encodeURIComponent(cleanUrl)}`,
@@ -936,11 +1078,17 @@ async function extractMetaPlatformMedia(
     if (err?.name === 'AbortError' && signal?.aborted) throw err;
   }
 
-  // Fallback to backend /api/extract for IG/FB if not already called
-  if (platform !== 'threads') {
-    const { data, backendError } = await callBackendXExtract(cleanUrl, signal);
+  // Fallback to backend /api/extract for FB if not already called
+  // (Instagram and Threads already called the backend above.)
+  if (platform !== 'threads' && platform !== 'instagram') {
+    const { data, backendError, backendUnavailable } = await callBackendXExtract(cleanUrl, signal);
     if (data) return data;
+    if (backendUnavailable) backendWasUnavailable = true;
     if (backendError) backendErrorMsg = backendError;
+  }
+
+  if (backendWasUnavailable && !backendErrorMsg) {
+    throw new Error(getBackendUnavailableError(lang));
   }
 
   if (backendErrorMsg) {
