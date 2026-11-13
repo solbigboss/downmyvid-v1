@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile document storing display info and settings.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 200 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid"]
+    },
+    "DownloadRecord": {
+      "title": "DownloadRecord",
+      "description": "A saved download history record for an authenticated user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 300 },
+        "authorHandle": { "type": "string", "maxLength": 100 },
+        "thumbnailUrl": { "type": "string", "maxLength": 500 },
+        "format": { "type": "string", "maxLength": 20 },
+        "quality": { "type": "string", "maxLength": 50 },
+        "sizeMb": { "type": "number" },
+        "originalUrl": { "type": "string", "maxLength": 500 },
+        "mediaType": { "type": "string", "enum": ["video", "audio"] },
+        "downloadedAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "originalUrl", "downloadedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Public user profile document."
+    },
+    "/users/{userId}/downloads/{downloadId}": {
+      "schema": "DownloadRecord",
+      "description": "User download history records synchronized across devices."
+    }
+  }
+}
