@@ -1542,6 +1542,160 @@ async function startServer() {
     );
   }
 
+  // --- Instagram multi-method extractor -------------------------------------
+  // btch.igdl() alone is a single point of failure: Instagram blocks
+  // unauthenticated scrapers from datacenter IPs (Cloud Shell, Cloud Run,
+  // and a Hostinger VPS alike), so it often returns nothing even with the
+  // backend running. After btch, try, in order:
+  //   (i)  ddinstagram.com / instagram.com/<shortcode>/embed HTML, parsed
+  //        for video_url / og:video, with a browser User-Agent;
+  //   (ii) an authenticated session, when IG_SESSIONID / IG_CSRFTOKEN are
+  //        set in the environment (never hardcoded, never logged).
+  // No paid third-party API key is used here.
+  function decodeInstagramEscapedUrl(raw: string): string {
+    try {
+      let out = raw.replace(/\\\//g, '/').replace(/\\u0026/gi, '&').replace(/&amp;/g, '&');
+      // Only accept URLs that still look like a real video asset after decoding.
+      if (!/^https?:\/\//i.test(out)) return '';
+      return out;
+    } catch {
+      return '';
+    }
+  }
+
+  function extractInstagramShortcode(cleanInputUrl: string): { shortcode: string; kind: string } | null {
+    try {
+      const parsed = new URL(cleanInputUrl);
+      const m = parsed.pathname.match(/\/(reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
+      if (m?.[2]) return { shortcode: m[2], kind: m[1] === 'p' ? 'p' : 'reel' };
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  function instagramCookiesHeader(): string {
+    const sessionId = (process.env.IG_SESSIONID || '').trim();
+    const csrf = (process.env.IG_CSRFTOKEN || '').trim();
+    const parts: string[] = [];
+    if (sessionId) parts.push(`sessionid=${sessionId}`);
+    if (csrf) parts.push(`csrftoken=${csrf}`);
+    return parts.join('; ');
+  }
+
+  async function fetchInstagramEmbedHtml(
+    targetUrl: string,
+    label: string
+  ): Promise<{ html: string; method: string } | null> {
+    if (!isSafeExternalUrl(targetUrl)) {
+      console.warn(`[instagram] ${label}: skipped unsafe URL`);
+      return null;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const headers: Record<string, string> = {
+        'User-Agent': X_USER_AGENT,
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        Referer: 'https://www.instagram.com/',
+      };
+      const cookies = instagramCookiesHeader();
+      if (cookies) headers.Cookie = cookies;
+      const res = await fetch(targetUrl, { headers, signal: controller.signal });
+      if (!res.ok) {
+        console.warn(`[instagram] ${label}: HTTP ${res.status}`);
+        return null;
+      }
+      const html = await res.text();
+      if (!html || html.length < 200) {
+        console.warn(`[instagram] ${label}: empty/short response`);
+        return null;
+      }
+      return { html, method: label };
+    } catch (err: any) {
+      console.warn(`[instagram] ${label}: failed (${err?.name || err?.message || 'fetch error'})`);
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function parseInstagramVideoUrlsFromHtml(html: string): { videos: string[]; thumbnail: string } {
+    const videos: string[] = [];
+    const push = (raw?: string | null) => {
+      if (!raw) return;
+      const decoded = decodeInstagramEscapedUrl(raw);
+      if (decoded && isMetaVideoAssetUrl(decoded) && !videos.includes(decoded)) videos.push(decoded);
+    };
+    // <meta property="og:video" content="..."> / og:video:secure_url
+    for (const m of html.matchAll(/<meta[^>]+property=["']og:video(?::secure_url)?["'][^>]+content=["']([^"']+)["']/gi)) {
+      push(m[1]);
+    }
+    for (const m of html.matchAll(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:video(?::secure_url)?["']/gi)) {
+      push(m[1]);
+    }
+    // Embedded JSON: "video_url":"https://...mp4..."
+    for (const m of html.matchAll(/"video_url"\s*:\s*"((?:\\.|[^"\\])+)"/g)) {
+      push(m[1]);
+    }
+    // <link rel="preload" as="video" href="..."> and video src attributes
+    for (const m of html.matchAll(/<(?:video|source)[^>]+src=["']([^"']+)["']/gi)) {
+      push(m[1]);
+    }
+    let thumbnail = '';
+    const ogImage = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    if (ogImage?.[1]) thumbnail = ogImage[1];
+    return { videos, thumbnail };
+  }
+
+  async function extractInstagramViaEmbed(
+    cleanInputUrl: string
+  ): Promise<{ videos: string[]; thumbnail: string; method: string } | null> {
+    const parsed = extractInstagramShortcode(cleanInputUrl);
+    if (!parsed) {
+      console.warn('[instagram] embed: could not parse a reel/post shortcode from the URL');
+      return null;
+    }
+    const { shortcode, kind } = parsed;
+    const hasSession = Boolean((process.env.IG_SESSIONID || '').trim());
+    // (i-a) ddinstagram mirror — same path as the original post.
+    const ddUrl = `https://www.ddinstagram.com/${kind}/${shortcode}`;
+    const dd = await fetchInstagramEmbedHtml(ddUrl, 'ddinstagram');
+    if (dd) {
+      const found = parseInstagramVideoUrlsFromHtml(dd.html);
+      if (found.videos.length > 0) {
+        console.log(`[instagram] embed: ddinstagram succeeded for ${shortcode} (session: ${hasSession ? 'set' : 'not set'})`);
+        return { ...found, method: 'ddinstagram' };
+      }
+      console.warn('[instagram] embed: ddinstagram returned no video URL');
+    }
+    // (i-b) Official embed page — works best when IG_SESSIONID is set.
+    const embedUrl = `https://www.instagram.com/${kind}/${shortcode}/embed/`;
+    const embed = await fetchInstagramEmbedHtml(embedUrl, 'instagram-embed');
+    if (embed) {
+      const found = parseInstagramVideoUrlsFromHtml(embed.html);
+      if (found.videos.length > 0) {
+        console.log(`[instagram] embed: instagram-embed succeeded for ${shortcode} (session: ${hasSession ? 'set' : 'not set'})`);
+        return { ...found, method: 'instagram-embed' };
+      }
+      console.warn('[instagram] embed: instagram-embed returned no video URL');
+    }
+    return null;
+  }
+
+  // btch.igdl() with a timeout — the library call has no timeout of its own
+  // and could otherwise hang the /api/extract request indefinitely.
+  function btchIgdlWithTimeout(cleanInputUrl: string, btch: any): Promise<any> {
+    return Promise.race([
+      btch.igdl(cleanInputUrl),
+      new Promise((_resolve, reject) =>
+        setTimeout(() => reject(new Error('btch.igdl timed out after 20000ms')), 20000)
+      ),
+    ]);
+  }
+
   // Unified API Route: Extract media for X, TikTok, Instagram, Facebook, Threads
   app.post('/api/extract', async (req, res) => {
     try {
@@ -1574,13 +1728,28 @@ async function startServer() {
         return res.json({ success: true, data });
       }
 
-      // Use real btch-downloader extraction for Instagram & Facebook
+      // Use real btch-downloader extraction for Instagram & Facebook.
+      // Instagram is NOT single-point btch any more: if btch returns no
+      // usable video, fall back to the embed/ddinstagram HTML methods and
+      // (when configured) an authenticated Instagram session.
       const btch: any = await import('btch-downloader');
       let raw: any = null;
       let platformName = 'Social';
+      let instagramMethod = '';
+      let instagramThumbnail = '';
       if (lower.includes('instagram.com') || lower.includes('instagr.am')) {
         platformName = 'Instagram';
-        raw = await btch.igdl(cleanInputUrl);
+        try {
+          raw = await btchIgdlWithTimeout(cleanInputUrl, btch);
+          if (raw && raw.status !== false) {
+            instagramMethod = 'btch.igdl';
+          } else {
+            console.warn('[instagram] btch.igdl returned no usable result, trying embed fallbacks');
+          }
+        } catch (err: any) {
+          console.warn(`[instagram] btch.igdl failed (${err?.message || 'unknown error'}), trying embed fallbacks`);
+          raw = null;
+        }
       } else if (lower.includes('facebook.com') || lower.includes('fb.watch') || lower.includes('fb.com')) {
         platformName = 'Facebook';
         raw = await btch.fbdown(cleanInputUrl);
@@ -1617,7 +1786,28 @@ async function startServer() {
         visit(raw);
       }
 
+      // Instagram fallback: embed / ddinstagram HTML (with IG_SESSIONID
+      // cookies when set). Only runs when btch found nothing.
+      if (platformName === 'Instagram' && foundUrls.length === 0) {
+        const embed = await extractInstagramViaEmbed(cleanInputUrl);
+        if (embed) {
+          for (const u of embed.videos) {
+            if (isMetaVideoAssetUrl(u) && !foundUrls.includes(u)) foundUrls.push(u);
+          }
+          if (foundUrls.length > 0) {
+            instagramMethod = embed.method;
+            instagramThumbnail = embed.thumbnail || '';
+          }
+        }
+        if (foundUrls.length === 0) {
+          console.warn('[instagram] all methods failed (btch.igdl, ddinstagram, instagram-embed) — see [instagram] log lines above for which step failed');
+        }
+      }
+
       if (foundUrls.length > 0) {
+        if (platformName === 'Instagram') {
+          console.log(`[instagram] extracted via ${instagramMethod || 'unknown'}: ${foundUrls.length} video URL(s)`);
+        }
         return res.json({
           success: true,
           data: {
@@ -1635,7 +1825,7 @@ async function startServer() {
             viewCount: '—',
             likeCount: '—',
             retweetCount: '—',
-            thumbnailUrl: '',
+            thumbnailUrl: platformName === 'Instagram' ? instagramThumbnail : '',
             videoUrl: foundUrls[0],
             formats: foundUrls.slice(0, 3).map((u, idx) => ({
               id: `${platformName.toLowerCase()}_mp4_${idx}`,
