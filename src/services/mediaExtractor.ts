@@ -487,10 +487,7 @@ async function extractTwitterMedia(cleanUrl: string, lang: Language, signal?: Ab
   if (backendData) {
     return backendData;
   }
-  if (tweetReferencesStreamOrSpace) {
-    if (backendError) throw new Error(backendError);
-    if (backendUnavailable) throw new Error(getLocalizedError(lang, 'spacesUnsupported'));
-  }
+  // Let VxTwitter fallback try first — don't throw spacesUnsupported here
 
   // 3. Fallback: VxTwitter public API (CORS enabled)
   try {
