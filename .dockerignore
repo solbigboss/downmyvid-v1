@@ -10,3 +10,4 @@ Dockerfile*
 firebase.json
 firestore.rules
 firebase-blueprint.json
+dist

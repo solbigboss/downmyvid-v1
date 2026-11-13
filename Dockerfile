@@ -1,38 +1,32 @@
-# =========================================================
-# ViralX Production Container for Google Cloud Run
-# =========================================================
-FROM node:20-alpine AS base
+# DownMyVid production container for Render
+FROM node:26-bookworm-slim
 
-# Install dumb-init and ffmpeg for signal handling and HLS/MP3 remuxing
-RUN apk add --no-cache dumb-init ffmpeg
+# Install FFmpeg and process manager
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    dumb-init \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Set production environment
+# Install application dependencies
+COPY package.json .npmrc ./
+RUN npm install --include=dev --no-audit --no-fund
+
+# Copy application source
+COPY . .
+
+# Build frontend inside Docker
+RUN npm run build
+
+# Production settings
 ENV NODE_ENV=production
-ENV PORT=8080
 
-# Copy package manifests
-COPY package.json bun.lock* package-lock.json* ./
+EXPOSE 10000
 
-# Install runtime production dependencies + tsx (tsx is in dependencies)
-RUN npm install --omit=dev --ignore-scripts
+# Handle process signals correctly
+ENTRYPOINT ["dumb-init", "--"]
 
-# Copy application source files needed for runtime
-COPY tsconfig.json ./
-COPY server.ts ./
-COPY public ./public
-COPY dist ./dist
-COPY firebase-applet-config.json ./
-
-# Ensure correct non-root user permissions
-USER node
-
-# Expose Cloud Run default port
-EXPOSE 8080
-
-# Use dumb-init to properly handle container termination signals (SIGTERM/SIGINT)
-ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-
-# Execute Express server directly using tsx (already declared in dependencies)
-CMD ["npx", "tsx", "server.ts"]
+# Start Express backend
+CMD ["npm", "start"]

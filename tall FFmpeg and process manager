@@ -1,0 +1,74 @@
+[1mdiff --git a/.dockerignore b/.dockerignore[m
+[1mindex 24fb5f3..77d0893 100644[m
+[1m--- a/.dockerignore[m
+[1m+++ b/.dockerignore[m
+[36m@@ -10,3 +10,4 @@[m [mDockerfile*[m
+ firebase.json[m
+ firestore.rules[m
+ firebase-blueprint.json[m
+[32m+[m[32mdist[m
+[1mdiff --git a/Dockerfile b/Dockerfile[m
+[1mindex 07d8a0e..bc00bf3 100644[m
+[1m--- a/Dockerfile[m
+[1m+++ b/Dockerfile[m
+[36m@@ -1,38 +1,32 @@[m
+[31m-# =========================================================[m
+[31m-# ViralX Production Container for Google Cloud Run[m
+[31m-# =========================================================[m
+[31m-FROM node:20-alpine AS base[m
+[32m+[m[32m# DownMyVid production container for Render[m
+[32m+[m[32mFROM node:26-bookworm-slim[m
+ [m
+[31m-# Install dumb-init or dependencies if needed for signal handling[m
+[31m-RUN apk add --no-cache dumb-init[m
+[32m+[m[32m# Install FFmpeg and process manager[m
+[32m+[m[32mRUN apt-get update && apt-get install -y --no-install-recommends \[m
+[32m+[m[32m    ffmpeg \[m
+[32m+[m[32m    dumb-init \[m
+[32m+[m[32m    ca-certificates \[m
+[32m+[m[32m    && rm -rf /var/lib/apt/lists/*[m
+ [m
+ WORKDIR /app[m
+ [m
+[31m-# Set production environment[m
+[31m-ENV NODE_ENV=production[m
+[31m-ENV PORT=8080[m
+[31m-[m
+[31m-# Copy package manifests[m
+[31m-COPY package.json bun.lock* package-lock.json* ./[m
+[32m+[m[32m# Install application dependencies[m
+[32m+[m[32mCOPY package.json .npmrc ./[m
+[32m+[m[32mRUN npm install --include=dev --no-audit --no-fund[m
+ [m
+[31m-# Install runtime production dependencies + tsx (tsx is in dependencies)[m
+[31m-RUN npm install --omit=dev --ignore-scripts[m
+[32m+[m[32m# Copy application source[m
+[32m+[m[32mCOPY . .[m
+ [m
+[31m-# Copy application source files needed for runtime[m
+[31m-COPY tsconfig.json ./[m
+[31m-COPY server.ts ./[m
+[31m-COPY public ./public[m
+[31m-COPY dist ./dist[m
+[31m-COPY firebase-applet-config.json ./[m
+[32m+[m[32m# Build frontend inside Docker[m
+[32m+[m[32mRUN npm run build[m
+ [m
+[31m-# Ensure correct non-root user permissions[m
+[31m-USER node[m
+[32m+[m[32m# Production settings[m
+[32m+[m[32mENV NODE_ENV=production[m
+ [m
+[31m-# Expose Cloud Run default port[m
+[31m-EXPOSE 8080[m
+[32m+[m[32mEXPOSE 10000[m
+ [m
+[31m-# Use dumb-init to properly handle container termination signals (SIGTERM/SIGINT)[m
+[31m-ENTRYPOINT ["/usr/bin/dumb-init", "--"][m
+[32m+[m[32m# Handle process signals correctly[m
+[32m+[m[32mENTRYPOINT ["dumb-init", "--"][m
+ [m
+[31m-# Execute Express server directly using tsx (already declared in dependencies)[m
+[31m-CMD ["npx", "tsx", "server.ts"][m
+[32m+[m[32m# Start Express backend[m
+[32m+[m[32mCMD ["npm", "start"][m
