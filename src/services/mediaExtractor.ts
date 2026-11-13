@@ -7,6 +7,33 @@ const PLACEHOLDER_PATH_PATTERNS = [
   'viralx_audio.mp3',
 ];
 
+export function getApiBaseUrl(): string {
+  const raw = ((import.meta as any).env?.VITE_API_BASE_URL || '').trim();
+  return raw ? raw.replace(/\/+$/, '') : '';
+}
+
+export function resolveApiUrl(pathOrUrl: string): string {
+  if (!pathOrUrl) return pathOrUrl;
+  const trimmed = pathOrUrl.trim();
+  if (trimmed.startsWith('/api/')) {
+    const base = getApiBaseUrl();
+    return base ? `${base}${trimmed}` : trimmed;
+  }
+  return trimmed;
+}
+
+function isApiProxyPath(trimmed: string): boolean {
+  const base = getApiBaseUrl();
+  const normalized =
+    base && trimmed.startsWith(`${base}/api/`) ? trimmed.slice(base.length) : trimmed;
+  return (
+    normalized.startsWith('/api/stream-media') ||
+    normalized.startsWith('/api/proxy-download') ||
+    normalized.startsWith('/api/hls-proxy') ||
+    normalized.startsWith('/api/hls-download')
+  );
+}
+
 export function isPlaceholderUrl(rawUrl?: string | null): boolean {
   if (!rawUrl || typeof rawUrl !== 'string') return true;
   const trimmed = rawUrl.trim();
@@ -18,12 +45,7 @@ export function isPlaceholderUrl(rawUrl?: string | null): boolean {
   }
 
   // Inspect wrapped proxy/stream/HLS query URLs from backend
-  if (
-    trimmed.startsWith('/api/stream-media') ||
-    trimmed.startsWith('/api/proxy-download') ||
-    trimmed.startsWith('/api/hls-proxy') ||
-    trimmed.startsWith('/api/hls-download')
-  ) {
+  if (isApiProxyPath(trimmed)) {
     try {
       const parsed = new URL(trimmed, 'http://localhost');
       const innerUrl = parsed.searchParams.get('url');
@@ -42,12 +64,7 @@ export function isPlaceholderUrl(rawUrl?: string | null): boolean {
 export function isValidMediaStreamUrl(rawUrl?: string | null): rawUrl is string {
   if (!rawUrl || isPlaceholderUrl(rawUrl)) return false;
   if (/^https?:\/\/.+/i.test(rawUrl.trim())) return true;
-  if (
-    rawUrl.startsWith('/api/stream-media?') ||
-    rawUrl.startsWith('/api/proxy-download?') ||
-    rawUrl.startsWith('/api/hls-proxy?') ||
-    rawUrl.startsWith('/api/hls-download?')
-  ) {
+  if (isApiProxyPath(rawUrl.trim())) {
     return !isPlaceholderUrl(rawUrl);
   }
   return false;
@@ -234,32 +251,41 @@ function validateExtractedMediaData(data: any, expectedOriginalUrl: string): Twe
   if (!isValidMediaStreamUrl(data.videoUrl)) return null;
 
   const validFormats = Array.isArray(data.formats)
-    ? data.formats.filter((fmt: MediaFormat) => {
-        if (fmt.directUrl) {
-          return isValidMediaStreamUrl(fmt.directUrl);
-        }
-        return fmt.type === 'video' ? isValidMediaStreamUrl(data.videoUrl) : isValidMediaStreamUrl(data.audioUrl);
-      })
+    ? data.formats
+        .filter((fmt: MediaFormat) => {
+          if (fmt.directUrl) {
+            return isValidMediaStreamUrl(fmt.directUrl);
+          }
+          return fmt.type === 'video' ? isValidMediaStreamUrl(data.videoUrl) : isValidMediaStreamUrl(data.audioUrl);
+        })
+        .map((fmt: MediaFormat) => ({
+          ...fmt,
+          directUrl: fmt.directUrl ? resolveApiUrl(fmt.directUrl) : undefined,
+        }))
     : [];
 
   if (validFormats.length === 0) return null;
 
   const cleanThumb = data.thumbnailUrl && !isPlaceholderUrl(data.thumbnailUrl) ? data.thumbnailUrl : '';
-  const cleanAudio = data.audioUrl && isValidMediaStreamUrl(data.audioUrl) ? data.audioUrl : undefined;
+  const cleanAudio = data.audioUrl && isValidMediaStreamUrl(data.audioUrl) ? resolveApiUrl(data.audioUrl) : undefined;
 
   return {
     ...data,
     originalUrl: expectedOriginalUrl,
     thumbnailUrl: cleanThumb,
+    videoUrl: resolveApiUrl(data.videoUrl),
     audioUrl: cleanAudio,
     formats: validFormats,
   };
 }
 
-async function callBackendXExtract(cleanUrl: string, signal?: AbortSignal): Promise<{ data?: TweetMediaData; backendError?: string }> {
+async function callBackendXExtract(
+  cleanUrl: string,
+  signal?: AbortSignal
+): Promise<{ data?: TweetMediaData; backendError?: string; backendUnavailable?: boolean }> {
   try {
     const apiRes = await fetchJsonWithTimeout(
-      '/api/extract',
+      resolveApiUrl('/api/extract'),
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -280,6 +306,7 @@ async function callBackendXExtract(cleanUrl: string, signal?: AbortSignal): Prom
     if (err?.message && !err.message.includes('HTML instead of JSON') && !err.message.includes('HTTP 404')) {
       return { backendError: err.message };
     }
+    return { backendUnavailable: true };
   }
   return {};
 }
@@ -295,7 +322,7 @@ function buildTwitterMp3Format(sourceUrl: string, handle: string, durationSec: n
     sizeMb: Math.max(0.4, Number(((durationSec * 192000) / (8 * 1048576)).toFixed(1))),
     format: 'MP3',
     isPopular: false,
-    directUrl: `/api/hls-download?url=${encodeURIComponent(sourceUrl)}&format=mp3&live=0&filename=Downmyvid_${safeHandle}.mp3`,
+    directUrl: resolveApiUrl(`/api/hls-download?url=${encodeURIComponent(sourceUrl)}&format=mp3&live=0&filename=Downmyvid_${safeHandle}.mp3`),
   };
 }
 
@@ -456,12 +483,13 @@ async function extractTwitterMedia(cleanUrl: string, lang: Language, signal?: Ab
   }
 
   // 2. Backend /api/extract (resolves GraphQL cards: audiospace, broadcast, live streams, HLS-only videos, quote tweets)
-  const { data: backendData, backendError } = await callBackendXExtract(cleanUrl, signal);
+  const { data: backendData, backendError, backendUnavailable } = await callBackendXExtract(cleanUrl, signal);
   if (backendData) {
     return backendData;
   }
-  if (tweetReferencesStreamOrSpace && backendError) {
-    throw new Error(backendError);
+  if (tweetReferencesStreamOrSpace) {
+    if (backendError) throw new Error(backendError);
+    if (backendUnavailable) throw new Error(getLocalizedError(lang, 'spacesUnsupported'));
   }
 
   // 3. Fallback: VxTwitter public API (CORS enabled)
@@ -758,7 +786,7 @@ async function extractTikTokMedia(cleanUrl: string, lang: Language, signal?: Abo
   // 3. Fallback: local backend /api/extract/tiktok (strictly verified against placeholders)
   try {
     const apiRes = await fetchJsonWithTimeout(
-      '/api/extract/tiktok',
+      resolveApiUrl('/api/extract/tiktok'),
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -782,7 +810,7 @@ function isLikelyVideoStreamUrl(rawUrl?: string | null): rawUrl is string {
   if (!isValidMediaStreamUrl(rawUrl)) return false;
   const lower = rawUrl.toLowerCase();
   if (lower.includes('static.cdninstagram.com/rsrc.php')) return false;
-  if (rawUrl.startsWith('/api/')) return true;
+  if (isApiProxyPath(rawUrl.trim())) return true;
   try {
     const pathname = new URL(rawUrl).pathname.toLowerCase();
     if (/\.(jpg|jpeg|png|webp|gif|svg|avif|ico)$/i.test(pathname)) {

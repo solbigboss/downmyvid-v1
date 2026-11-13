@@ -102,6 +102,18 @@ async function startServer() {
 
   app.use(express.json());
 
+  // CORS support for static Firebase Hosting / custom domain frontends calling Cloud Run backend
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Content-Disposition, X-Downmyvid-Hls');
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+    next();
+  });
+
   // Apply reasonable rate limiting to API routes: 60 requests/minute per IP (exempting chunked HLS segment streaming)
   const apiLimiter = rateLimiter(60, 60 * 1000);
   const hlsLimiter = rateLimiter(600, 60 * 1000);

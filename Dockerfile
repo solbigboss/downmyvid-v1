@@ -3,8 +3,8 @@
 # =========================================================
 FROM node:20-alpine AS base
 
-# Install dumb-init or dependencies if needed for signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init and ffmpeg for signal handling and HLS/MP3 remuxing
+RUN apk add --no-cache dumb-init ffmpeg
 
 WORKDIR /app
 

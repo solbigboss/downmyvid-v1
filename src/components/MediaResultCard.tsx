@@ -24,7 +24,7 @@ import {
 import Hls from 'hls.js';
 import { TweetMediaData, MediaFormat, Language } from '../types';
 import { translations } from '../data/translations';
-import { isValidMediaStreamUrl } from '../services/mediaExtractor';
+import { isValidMediaStreamUrl, resolveApiUrl } from '../services/mediaExtractor';
 
 interface MediaResultCardProps {
   media: TweetMediaData;
@@ -66,6 +66,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
   const audioRef = useRef<HTMLAudioElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
+  const previewStreamFallbackTriedRef = useRef(false);
   const t = translations[currentLang];
 
   const isHlsUrl = (u?: string | null) =>
@@ -80,6 +81,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
       hlsRef.current = null;
     }
 
+    previewStreamFallbackTriedRef.current = false;
     setIsPlaying(false);
     setIsMuted(false);
     setCurrentTime(0);
@@ -94,11 +96,14 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
     setVideoError(null);
     setDownloadError(null);
 
-    const streamUrl = media.isSpaces ? media.audioUrl || media.videoUrl : media.videoUrl;
+    const rawStreamUrl = media.isSpaces ? media.audioUrl || media.videoUrl : media.videoUrl;
+    const streamUrl = rawStreamUrl ? resolveApiUrl(rawStreamUrl) : '';
     const targetEl: HTMLMediaElement | null = media.isSpaces ? audioRef.current : videoRef.current;
 
     if (targetEl && streamUrl) {
       targetEl.pause();
+      targetEl.setAttribute('referrerpolicy', 'no-referrer');
+      (targetEl as any).referrerPolicy = 'no-referrer';
       if (isHlsUrl(streamUrl)) {
         if (Hls.isSupported()) {
           const hls = new Hls({
@@ -135,6 +140,39 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
       }
     };
   }, [media.id, media.videoUrl, media.audioUrl, media.originalUrl, media.isSpaces, safeDuration]);
+
+  const handlePreviewMediaError = async () => {
+    const rawStreamUrl = media.isSpaces ? media.audioUrl || media.videoUrl : media.videoUrl;
+    const targetEl: HTMLMediaElement | null = media.isSpaces ? audioRef.current : videoRef.current;
+
+    if (
+      !previewStreamFallbackTriedRef.current &&
+      targetEl &&
+      rawStreamUrl &&
+      /^https?:\/\//i.test(rawStreamUrl) &&
+      !isHlsUrl(rawStreamUrl)
+    ) {
+      previewStreamFallbackTriedRef.current = true;
+      try {
+        const healthRes = await fetch(resolveApiUrl('/api/health'), { cache: 'no-store' });
+        const ct = (healthRes.headers.get('content-type') || '').toLowerCase();
+        if (healthRes.ok && ct.includes('application/json')) {
+          targetEl.src = resolveApiUrl(`/api/stream-media?url=${encodeURIComponent(rawStreamUrl)}`);
+          targetEl.load();
+          return;
+        }
+      } catch {
+        // Backend unavailable (static hosting) — fall through to error banner
+      }
+    }
+
+    setIsPlaying(false);
+    setVideoError(
+      media.isSpaces
+        ? 'Space audio preview unavailable. Use the download buttons below.'
+        : 'Browser could not play this video stream directly. Try the download options below.'
+    );
+  };
 
   const getActiveMediaElement = (): HTMLMediaElement | null =>
     media.isSpaces ? audioRef.current : videoRef.current;
@@ -208,10 +246,13 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
     mimeType: string,
     signal: AbortSignal
   ): Promise<{ ok: boolean; htmlReturned?: boolean }> => {
-    const isSameOrigin = fetchUrl.startsWith('/');
+    const isSameOrigin =
+      fetchUrl.startsWith('/') ||
+      (typeof window !== 'undefined' && fetchUrl.startsWith(window.location.origin));
     const res = await fetch(fetchUrl, {
       mode: isSameOrigin ? 'same-origin' : 'cors',
       cache: 'no-store',
+      referrerPolicy: 'no-referrer',
       signal,
     });
     const contentType = (res.headers.get('content-type') || '').toLowerCase();
@@ -290,16 +331,22 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
     const mimeType =
       ext === 'mp3' ? 'audio/mpeg' : ext === 'm4a' ? 'audio/mp4' : 'video/mp4';
 
-    const proxyUrl = rawTargetUrl.startsWith('/api/')
-      ? rawTargetUrl
-      : `/api/proxy-download?url=${encodeURIComponent(rawTargetUrl)}&filename=${encodeURIComponent(filename)}`;
+    const resolvedTarget = resolveApiUrl(rawTargetUrl);
+    const isBackendEndpoint =
+      /^\/api\/(?:proxy-download|hls-download|hls-proxy|stream-media)\b/i.test(rawTargetUrl) ||
+      /\/api\/(?:proxy-download|hls-download|hls-proxy|stream-media)\b/i.test(resolvedTarget);
+    const isDirectExternalHttps = /^https?:\/\//i.test(rawTargetUrl) && !isBackendEndpoint;
+
+    const proxyUrl = isBackendEndpoint
+      ? resolvedTarget
+      : resolveApiUrl(`/api/proxy-download?url=${encodeURIComponent(rawTargetUrl)}&filename=${encodeURIComponent(filename)}`);
 
     let downloaded = false;
     let backendMissingForHls = false;
 
     try {
-      // 1. If external HTTPS URL (e.g., X video.twimg.com), fetch directly with cache:'no-store' to avoid <video> non-CORS cache poisoning
-      if (/^https?:\/\//i.test(rawTargetUrl)) {
+      // 1. If external HTTPS URL (e.g., X video.twimg.com, TikWM), fetch directly with no-referrer & cache:'no-store'
+      if (isDirectExternalHttps) {
         try {
           const directAttempt = await streamDownloadToDisk(
             rawTargetUrl,
@@ -323,8 +370,24 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
             controller.signal
           );
           downloaded = proxyAttempt.ok;
-          if (!downloaded && proxyAttempt.htmlReturned && rawTargetUrl.startsWith('/api/hls-download')) {
-            backendMissingForHls = true;
+          if (!downloaded && proxyAttempt.htmlReturned) {
+            if (isBackendEndpoint || rawTargetUrl.includes('/api/hls-download')) {
+              backendMissingForHls = true;
+            } else if (isDirectExternalHttps) {
+              // Running on static Firebase Hosting without a backend proxy & CDN disallowed CORS fetch:
+              // trigger direct no-referrer download link fallback instead of failing.
+              const a = document.createElement('a');
+              a.href = rawTargetUrl;
+              a.download = filename;
+              a.target = '_blank';
+              a.rel = 'noopener noreferrer';
+              a.referrerPolicy = 'no-referrer';
+              a.style.display = 'none';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              downloaded = true;
+            }
           }
         } catch (err: any) {
           if (err?.name === 'AbortError') return;
@@ -337,7 +400,13 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
         if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
         window.setTimeout(() => setDownloadComplete(null), 5000);
       } else if (backendMissingForHls) {
-        setDownloadError('Live broadcast & Spaces MP4/MP3 conversion requires the backend server.');
+        const msgMap: Record<Language, string> = {
+          en: 'MP3 conversion & Live/Spaces capture require the Express backend server (not available on static-only Firebase Hosting).',
+          fr: 'La conversion MP3 et la capture Live/Spaces nécessitent le serveur backend Express.',
+          es: 'La conversión a MP3 y la captura en vivo/Spaces requieren el servidor backend Express.',
+          ar: 'تحويل MP3 وتحميل البث المباشر/المساحات يتطلب تشغيل خادم Express الخلفي (غير متاح على الاستضافة الساكنة وحدها).',
+        };
+        setDownloadError(msgMap[currentLang] || msgMap.en);
       } else {
         setDownloadError('Direct download was blocked by the origin CDN. Please try another quality or retry.');
       }
@@ -437,10 +506,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
                 onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
-                onError={() => {
-                  setIsPlaying(false);
-                  setVideoError('Space audio preview unavailable. Use the download buttons below.');
-                }}
+                onError={handlePreviewMediaError}
               />
               <div className="w-16 h-16 rounded-full bg-[#1d9bf0]/20 border border-[#1d9bf0] flex items-center justify-center mb-3 animate-pulse">
                 <Music className="w-8 h-8 text-[#1d9bf0]" />
@@ -473,10 +539,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
               loop
               preload="metadata"
               onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-              onError={() => {
-                setIsPlaying(false);
-                setVideoError('Browser could not play this video stream directly. Try the download options below.');
-              }}
+              onError={handlePreviewMediaError}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
               className="w-full h-full object-contain"
