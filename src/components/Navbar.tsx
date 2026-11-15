@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Download,
   Bookmark,
-  Sparkles,
   Check,
   ChevronDown,
   Moon,
@@ -89,15 +87,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Desktop Navigation Links */}
           <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-[#536471] dark:text-[#cfd9de]">
-            <button
-              onClick={() => onTabChange('mp3')}
-              className={`transition-colors hover:text-[#0f1419] dark:hover:text-white py-1 flex items-center gap-1.5 ${
-                activeTab === 'mp3' ? 'text-[#1d9bf0] dark:text-[#1d9bf0] border-b-2 border-[#1d9bf0]' : ''
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-[#ffad1f]" />
-              <span>{t.navMp3}</span>
-            </button>
             <button
               onClick={() => onTabChange('guides')}
               className={`transition-colors hover:text-[#0f1419] dark:hover:text-white py-1 ${
@@ -253,13 +242,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
-            <button
-              onClick={() => onTabChange('mp3')}
-              className="inline-flex items-center gap-1.5 bg-[#1d9bf0] hover:bg-[#1a8cd8] text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-sm active:scale-95"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>MP3 (320k)</span>
-            </button>
           </div>
 
           {/* Mobile View: Hamburger Menu Button Opposite to Logo */}

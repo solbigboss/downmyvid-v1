@@ -139,7 +139,7 @@ export const GuidesView: React.FC<GuidesViewProps> = ({ currentLang, onBackToHom
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-black text-[#0f1419] dark:text-white">
-                {currentLang === 'ar' ? 'استخراج صوتيات المساحات (Spaces to MP3)' : 'Extract Twitter Spaces to 320kbps MP3'}
+                {currentLang === 'ar' ? 'تحويل Spaces إلى MP3 يتطلب خادماً خلفياً' : 'Spaces to MP3 requires the Express backend'}
               </h2>
               <p className="text-xs text-[#536471] dark:text-[#8b98a5]">
                 Podcasts, Interviews, and Keynote Discussions
@@ -150,7 +150,7 @@ export const GuidesView: React.FC<GuidesViewProps> = ({ currentLang, onBackToHom
           <p className="text-xs sm:text-sm text-[#536471] dark:text-[#8b98a5] leading-relaxed mb-3">
             {currentLang === 'ar'
               ? 'تتيح تقنية Downmyvid استخراج التسجيل الكامل لأي مساحة صوتية منشورة مع الاحتفاظ بجودة الستيريو الأصلية بدون تشويش أو ضغط زائد.'
-              : 'Downmyvid automatically connects to the Twitter audio CDN stream to extract the original stereo audio at pristine 320kbps bitrates, compatible with Spotify local files and Apple Music.'}
+              : 'Spaces audio conversion requires the Express backend and ffmpeg. It is not available on the static Firebase Hosting site; audio bitrate depends on the source and conversion.'}
           </p>
         </div>
 

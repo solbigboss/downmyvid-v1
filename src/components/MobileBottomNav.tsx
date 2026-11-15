@@ -1,29 +1,24 @@
 import React from 'react';
-import { Download, Music, HelpCircle, Bookmark } from 'lucide-react';
-import { ActiveTab, Language } from '../types';
-import { translations } from '../data/translations';
+import { Download, HelpCircle, Bookmark } from 'lucide-react';
+import { ActiveTab } from '../types';
 
 interface MobileBottomNavProps {
   activeTab: ActiveTab;
   onTabChange: (tab: ActiveTab) => void;
   savedCount: number;
-  currentLang: Language;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeTab,
   onTabChange,
   savedCount,
-  currentLang,
 }) => {
-  const t = translations[currentLang];
-
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-black/95 backdrop-blur-lg border-t border-[#cfd9de] dark:border-[#2f3336] pb-safe transition-colors duration-200"
       aria-label="Mobile Bottom Navigation"
     >
-      <div className="grid grid-cols-4 items-center h-16 max-w-md mx-auto px-2">
+      <div className="grid grid-cols-3 items-center h-16 max-w-md mx-auto px-2">
         {/* Tab 1: Home / Downloader */}
         <button
           onClick={() => onTabChange('home')}
@@ -36,23 +31,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         >
           <Download className="w-5 h-5" />
           <span className="text-[10px] mt-1 tracking-tight truncate max-w-[70px]">
-            {currentLang === 'ar' ? 'الرئيسية' : 'Home'}
-          </span>
-        </button>
-
-        {/* Tab 2: Twitter to MP3 */}
-        <button
-          onClick={() => onTabChange('mp3')}
-          className={`flex flex-col items-center justify-center h-full transition-colors ${
-            activeTab === 'mp3'
-              ? 'text-[#ffad1f] font-bold'
-              : 'text-[#536471] dark:text-[#8b98a5] hover:text-[#0f1419] dark:hover:text-white'
-          }`}
-          aria-label="Twitter MP3"
-        >
-          <Music className="w-5 h-5" />
-          <span className="text-[10px] mt-1 tracking-tight truncate max-w-[70px]">
-            {t.navMp3}
+            Home
           </span>
         </button>
 
@@ -68,7 +47,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         >
           <HelpCircle className="w-5 h-5" />
           <span className="text-[10px] mt-1 tracking-tight truncate max-w-[70px]">
-            {t.navHowToUse}
+            Guides
           </span>
         </button>
 
@@ -91,7 +70,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             )}
           </div>
           <span className="text-[10px] mt-1 tracking-tight truncate max-w-[70px]">
-            {t.navHistory}
+            Saved
           </span>
         </button>
       </div>

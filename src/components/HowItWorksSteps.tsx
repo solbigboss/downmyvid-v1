@@ -115,11 +115,11 @@ export const HowItWorksSteps: React.FC<HowItWorksStepsProps> = ({ currentLang })
               {/* Visual Mockup */}
               <div className="bg-white dark:bg-[#15202b] rounded-2xl p-4 border border-[#eff3f4] dark:border-[#2f3336] shadow-xs mb-5 flex flex-col gap-1.5">
                 <div className="bg-[#0f1419] dark:bg-[#1d9bf0] text-white p-2 rounded-xl text-[11px] font-bold flex items-center justify-between">
-                  <span>1080p Full HD</span>
+                  <span>Available video format</span>
                   <Download className="w-3.5 h-3.5 text-white" />
                 </div>
                 <div className="bg-[#ffad1f]/15 dark:bg-[#ffad1f]/20 text-[#0f1419] dark:text-white border border-[#ffad1f]/40 p-2 rounded-xl text-[11px] font-bold flex items-center justify-between">
-                  <span>Audio MP3 (320k)</span>
+                  <span>More available formats</span>
                   <Download className="w-3.5 h-3.5 text-[#ffad1f]" />
                 </div>
               </div>
