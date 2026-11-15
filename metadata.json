@@ -1,6 +1,6 @@
 {
-  "name": "Remix ViralX - Twitter Video Downloader \u0026 MP3 Converter",
-  "description": "Fastest high-definition Twitter/X video downloader and MP3 audio extractor. Mobile-first, zero layout shift, and global multi-language support.",
+  "name": "DownMyVid - X/Twitter Video Downloader",
+  "description": "Download publicly available X/Twitter videos in formats offered by the source. Free to use, no sign-up required.",
   "requestFramePermissions": [
     "clipboard-read",
     "clipboard-write"

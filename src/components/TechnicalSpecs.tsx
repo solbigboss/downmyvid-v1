@@ -11,29 +11,29 @@ export const TechnicalSpecs: React.FC<TechnicalSpecsProps> = ({ currentLang }) =
     {
       title: 'Video Encoding',
       titleAr: 'ترميز الفيديو',
-      value: 'H.264 / AVC (High Profile)',
-      sub: 'Universal MP4 container, iOS & Android native playback',
+      value: 'Formats vary by source',
+      sub: 'Output depends on the returned media stream',
       icon: Cpu,
     },
     {
       title: 'Audio Bitrate',
       titleAr: 'جودة الصوت ومعدل البت',
-      value: '320 kbps MP3 / AAC',
-      sub: '48 kHz Stereo master stream, no compression artifacts',
+      value: 'Varies by source and conversion',
+      sub: 'Source audio characteristics vary',
       icon: Radio,
     },
     {
       title: 'Watermark Policy',
       titleAr: 'العلامة المائية',
-      value: '0% Watermark / Overlays',
-      sub: 'Original pristine source bitstream directly from CDN',
+      value: 'Watermark depends on source',
+      sub: 'Media is fetched from the original source or configured backend',
       icon: Sparkles,
     },
     {
       title: 'Data & Privacy',
       titleAr: 'الخصوصية والأمان',
-      value: 'Stateless Tunnel',
-      sub: 'No files saved on servers; SSL encrypted in transit',
+      value: 'Hosting dependent',
+      sub: 'Review the service privacy policy and hosting configuration',
       icon: Shield,
     },
   ];
@@ -49,7 +49,7 @@ export const TechnicalSpecs: React.FC<TechnicalSpecsProps> = ({ currentLang }) =
             </span>
           </div>
           <span className="text-[11px] font-mono font-semibold text-[#00ba7c] bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-md">
-            Verified Pipeline
+            Source dependent
           </span>
         </div>
 

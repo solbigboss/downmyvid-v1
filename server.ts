@@ -5,11 +5,18 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { Readable } from 'stream';
 import { spawn } from 'child_process';
+import { isIP } from 'net';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // SSRF Guard: Prevent internal IP, localhost, cloud metadata, or private network probing
+function withTimeoutSignal(timeoutMs: number): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error('Upstream request timed out')), timeoutMs);
+  return { signal: controller.signal, cleanup: () => clearTimeout(timer) };
+}
+
 function isSafeExternalUrl(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl);
@@ -18,7 +25,7 @@ function isSafeExternalUrl(rawUrl: string): boolean {
       return false;
     }
 
-    const hostname = parsed.hostname.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
 
     // Block localhost, loopbacks, and link-local
     if (
@@ -38,19 +45,17 @@ function isSafeExternalUrl(rawUrl: string): boolean {
       return false;
     }
 
-    // Block private RFC 1918 ranges
-    // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 (CGNAT)
-    const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-    if (ipv4Match) {
-      const b0 = parseInt(ipv4Match[1], 10);
-      const b1 = parseInt(ipv4Match[2], 10);
-      if (b0 === 10) return false;
-      if (b0 === 172 && b1 >= 16 && b1 <= 31) return false;
-      if (b0 === 192 && b1 === 168) return false;
-      if (b0 === 169 && b1 === 254) return false;
-      if (b0 === 127) return false;
-      if (b0 === 0) return false;
+    // Block private, loopback, link-local, multicast, and reserved IP literals.
+    if (isIP(hostname) === 4) {
+      const octets = hostname.split('.').map(Number);
+      const [a, b] = octets;
+      if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+      if (a === 169 && b === 254) return false;
+      if (a === 172 && b >= 16 && b <= 31) return false;
+      if (a === 192 && (b === 0 || b === 168)) return false;
+      if (a === 100 && b >= 64 && b <= 127) return false;
     }
+    if (isIP(hostname) === 6) return false;
 
     return true;
   } catch {
@@ -134,13 +139,15 @@ async function startServer() {
   // Helper to extract TikTok videos via TikWM
   async function extractTikTok(cleanInputUrl: string) {
     const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(cleanInputUrl)}&hd=1`;
+    const upstreamTimeout = withTimeoutSignal(20000);
     const response = await fetch(apiUrl, {
+      signal: upstreamTimeout.signal,
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         Accept: 'application/json',
       },
-    });
+    }).finally(upstreamTimeout.cleanup);
 
     if (!response.ok) {
       throw new Error(`TikWM response status: ${response.status}`);
@@ -209,7 +216,7 @@ async function startServer() {
                   label: 'Original Audio (MP3)',
                   type: 'audio',
                   quality: '320 kbps',
-                  bitrate: '320kbps Audio',
+                  bitrate: 'Original source audio',
                   sizeMb: 3.2,
                   format: 'MP3',
                   isPopular: true,
@@ -226,27 +233,33 @@ async function startServer() {
   // =========================================================================
   // X / Twitter Guest Token, GraphQL, Live Broadcast & Audio Spaces Engine
   // =========================================================================
-  const X_PUBLIC_BEARER =
-    'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
+  const X_PUBLIC_BEARER = (process.env.X_PUBLIC_BEARER || '').trim();
+  if (!X_PUBLIC_BEARER) {
+    console.warn('X_PUBLIC_BEARER is unset; X API guest-token extraction is disabled.');
+  }
+  const X_AUTHORIZATION = X_PUBLIC_BEARER.startsWith('Bearer ') ? X_PUBLIC_BEARER : `Bearer ${X_PUBLIC_BEARER}`;
   const X_USER_AGENT =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
   let cachedGuestToken: { token: string; expiresAt: number } | null = null;
 
   async function getXGuestToken(forceRefresh = false): Promise<string> {
+    if (!X_PUBLIC_BEARER) throw new Error('X API extraction is not configured on this backend.');
     if (!forceRefresh && cachedGuestToken && Date.now() < cachedGuestToken.expiresAt) {
       return cachedGuestToken.token;
     }
 
+    const tokenTimeout = withTimeoutSignal(15000);
     const res = await fetch('https://api.x.com/1.1/guest/activate.json', {
       method: 'POST',
+      signal: tokenTimeout.signal,
       headers: {
-        Authorization: X_PUBLIC_BEARER,
+        Authorization: X_AUTHORIZATION,
         'User-Agent': X_USER_AGENT,
         Origin: 'https://x.com',
         Referer: 'https://x.com/',
       },
-    });
+    }).finally(tokenTimeout.cleanup);
 
     if (!res.ok) {
       throw new Error(`Failed to obtain X guest session (${res.status})`);
@@ -264,29 +277,33 @@ async function startServer() {
 
   async function fetchXApiJson(url: string, retryOnAuth = true): Promise<any> {
     const token = await getXGuestToken(false);
+    const apiTimeout = withTimeoutSignal(20000);
     const res = await fetch(url, {
+      signal: apiTimeout.signal,
       headers: {
-        Authorization: X_PUBLIC_BEARER,
+        Authorization: X_AUTHORIZATION,
         'x-guest-token': token,
         'User-Agent': X_USER_AGENT,
         Origin: 'https://x.com',
         Referer: 'https://x.com/',
         Accept: 'application/json',
       },
-    });
+    }).finally(apiTimeout.cleanup);
 
     if ((res.status === 401 || res.status === 403) && retryOnAuth) {
       const freshToken = await getXGuestToken(true);
+      const retryTimeout = withTimeoutSignal(20000);
       const retryRes = await fetch(url, {
+        signal: retryTimeout.signal,
         headers: {
-          Authorization: X_PUBLIC_BEARER,
+          Authorization: X_AUTHORIZATION,
           'x-guest-token': freshToken,
           'User-Agent': X_USER_AGENT,
           Origin: 'https://x.com',
           Referer: 'https://x.com/',
           Accept: 'application/json',
         },
-      });
+      }).finally(retryTimeout.cleanup);
       if (!retryRes.ok) {
         throw new Error(`X API responded with HTTP ${retryRes.status}`);
       }
@@ -308,12 +325,14 @@ async function startServer() {
 
   async function parseHlsMasterVariants(masterUrl: string): Promise<HlsVariant[]> {
     try {
+      const timeout = withTimeoutSignal(15000);
       const res = await fetch(masterUrl, {
+        signal: timeout.signal,
         headers: {
           'User-Agent': X_USER_AGENT,
           Referer: 'https://x.com/',
         },
-      });
+      }).finally(timeout.cleanup);
       if (!res.ok) return [];
       const text = await res.text();
       if (!text.includes('#EXT-X-STREAM-INF')) return [];
@@ -466,10 +485,10 @@ async function startServer() {
       },
       {
         id: 'space_mp3',
-        label: 'Space Audio (MP3 320k)',
+        label: 'Space audio (MP3 · backend required)',
         type: 'audio',
-        quality: '320 kbps MP3',
-        bitrate: '320kbps MP3',
+        quality: 'MP3 · approx. 192 kbps VBR',
+        bitrate: 'Approx. 192 kbps VBR',
         sizeMb: Math.max(1.5, Number(((durationSeconds * 192000) / (8 * 1048576)).toFixed(1))),
         format: 'MP3',
         isPopular: false,
@@ -586,8 +605,8 @@ async function startServer() {
       id: 'bc_mp3',
       label: 'Broadcast Audio (MP3)',
       type: 'audio',
-      quality: '320 kbps MP3',
-      bitrate: '320kbps MP3',
+      quality: 'MP3 · approx. 192 kbps VBR',
+      bitrate: 'Approx. 192 kbps VBR',
       sizeMb: Math.max(1.2, Number(((durationSeconds * 160000) / (8 * 1048576)).toFixed(1))),
       format: 'MP3',
       directUrl: `/api/hls-download?url=${encodeURIComponent(variants[0]?.url || masterM3u8)}&format=mp3&live=${liveFlag}&filename=Downmyvid_${safeHandle}_Live.mp3`,
@@ -686,10 +705,10 @@ async function startServer() {
     const safeHandle = (handle || 'x_audio').replace(/[^a-zA-Z0-9_]/g, '') || 'x_audio';
     return {
       id: 'tw_mp3',
-      label: 'Extract Audio (MP3 320k)',
+      label: 'MP3 audio (backend required)',
       type: 'audio',
-      quality: '320 kbps MP3',
-      bitrate: '320kbps MP3',
+      quality: 'MP3 · approx. 192 kbps VBR',
+      bitrate: 'Approx. 192 kbps VBR',
       sizeMb: Math.max(0.4, Number(((durationSec * 192000) / (8 * 1048576)).toFixed(1))),
       format: 'MP3',
       isPopular: false,
@@ -713,13 +732,18 @@ async function startServer() {
     try {
       const parsedHost = new URL(cleanInputUrl).hostname.toLowerCase();
       if (parsedHost === 't.co') {
+        const redirectTimeout = withTimeoutSignal(10000);
         const redirRes = await fetch(cleanInputUrl, {
           method: 'GET',
           headers: { 'User-Agent': X_USER_AGENT },
           redirect: 'follow',
-        });
+          signal: redirectTimeout.signal,
+        }).finally(redirectTimeout.cleanup);
         if (redirRes.url && !redirRes.url.includes('t.co/')) {
-          cleanInputUrl = redirRes.url;
+          const resolved = new URL(redirRes.url);
+          if (['x.com', 'twitter.com', 'mobile.twitter.com'].includes(resolved.hostname.toLowerCase())) {
+            cleanInputUrl = resolved.toString();
+          }
         }
       }
     } catch {
@@ -758,9 +782,11 @@ async function startServer() {
     // 2a. Try FxTwitter (fast, checks videos, facets, and quotes)
     try {
       const fxUrl = `https://api.fxtwitter.com/${encodeURIComponent(handle)}/status/${statusId}`;
+      const fxTimeout = withTimeoutSignal(15000);
       const resp = await fetch(fxUrl, {
         headers: { 'User-Agent': X_USER_AGENT, Accept: 'application/json' },
-      });
+        signal: fxTimeout.signal,
+      }).finally(fxTimeout.cleanup);
       if (resp.ok) {
         const fxData: any = await resp.json();
         if (fxData?.code === 200 && fxData?.tweet) {
@@ -1296,10 +1322,10 @@ async function startServer() {
         },
         {
           id: 'threads_voice_mp3',
-          label: 'Voice Audio (MP3 320k)',
+          label: 'Voice audio (MP3 · backend required)',
           type: 'audio',
-          quality: '320 kbps MP3',
-          bitrate: '320kbps MP3',
+          quality: 'MP3 · approx. 192 kbps VBR',
+          bitrate: 'Approx. 192 kbps VBR',
           sizeMb: Math.max(0.5, Number(((durationSeconds * 192000) / (8 * 1048576)).toFixed(1))),
           format: 'MP3',
           directUrl: `/api/hls-download?url=${encodeURIComponent(audioUrl)}&format=mp3&live=0&filename=Downmyvid_Threads_${safeHandle}.mp3`,
@@ -1308,10 +1334,10 @@ async function startServer() {
     } else if (primaryVideoUrl) {
       formats.push({
         id: 'threads_mp3',
-        label: 'Extract Audio (MP3 320k)',
+        label: 'MP3 audio (backend required)',
         type: 'audio',
-        quality: '320 kbps MP3',
-        bitrate: '320kbps MP3',
+        quality: 'MP3 · approx. 192 kbps VBR',
+        bitrate: 'Approx. 192 kbps VBR',
         sizeMb: Math.max(0.6, Number(((durationSeconds * 192000) / (8 * 1048576)).toFixed(1))),
         format: 'MP3',
         directUrl: `/api/hls-download?url=${encodeURIComponent(primaryVideoUrl)}&format=mp3&live=0&filename=Downmyvid_Threads_${safeHandle}.mp3`,
@@ -1352,6 +1378,7 @@ async function startServer() {
 
     // 1. Primary: Fetch Threads SSR HTML and match the exact post code inside <script type="application/json">
     try {
+      const pageTimeout = withTimeoutSignal(20000);
       const pageRes = await fetch(fetchUrl, {
         headers: {
           'User-Agent': X_USER_AGENT,
@@ -1361,7 +1388,8 @@ async function startServer() {
           'Sec-Fetch-Site': 'none',
         },
         redirect: 'follow',
-      });
+        signal: pageTimeout.signal,
+      }).finally(pageTimeout.cleanup);
 
       if (pageRes.ok) {
         const redirectedCode = pageRes.url.match(/\/(?:post|t)\/([A-Za-z0-9_-]+)/i)?.[1];
@@ -1469,10 +1497,12 @@ async function startServer() {
       const embedUrl = handleMatch
         ? `https://www.threads.com/@${handleMatch}/post/${targetCode}/embed`
         : `https://www.threads.com/t/${targetCode}/embed`;
+      const embedTimeout = withTimeoutSignal(15000);
       const embedRes = await fetch(embedUrl, {
         headers: { 'User-Agent': X_USER_AGENT, Accept: 'text/html' },
         redirect: 'follow',
-      });
+        signal: embedTimeout.signal,
+      }).finally(embedTimeout.cleanup);
       if (embedRes.ok) {
         const embedHtml = await embedRes.text();
         const ogVid = embedHtml.match(/property="og:video(?::url)?"\s+content="([^"]+)"/i)?.[1]?.replace(/&amp;/g, '&');
@@ -1600,7 +1630,9 @@ async function startServer() {
         'Accept-Language': 'en-US,en;q=0.9',
         Referer: 'https://www.instagram.com/',
       };
-      const cookies = instagramCookiesHeader();
+      const targetHost = new URL(targetUrl).hostname.toLowerCase();
+      const isInstagramHost = targetHost === 'instagram.com' || targetHost.endsWith('.instagram.com');
+      const cookies = isInstagramHost ? instagramCookiesHeader() : '';
       if (cookies) headers.Cookie = cookies;
       const res = await fetch(targetUrl, { headers, signal: controller.signal });
       if (!res.ok) {
@@ -1687,19 +1719,27 @@ async function startServer() {
 
   // btch.igdl() with a timeout — the library call has no timeout of its own
   // and could otherwise hang the /api/extract request indefinitely.
-  function btchIgdlWithTimeout(cleanInputUrl: string, btch: any): Promise<any> {
-    return Promise.race([
-      btch.igdl(cleanInputUrl),
-      new Promise((_resolve, reject) =>
-        setTimeout(() => reject(new Error('btch.igdl timed out after 20000ms')), 20000)
-      ),
-    ]);
+  async function btchIgdlWithTimeout(cleanInputUrl: string, btch: any): Promise<any> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        btch.igdl(cleanInputUrl),
+        new Promise((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error('btch.igdl timed out after 20000ms')), 20000);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   // Unified API Route: Extract media for X, TikTok, Instagram, Facebook, Threads
   app.post('/api/extract', async (req, res) => {
     try {
       const { url } = req.body;
+      if (typeof url !== 'string' || !isSafeExternalUrl(url)) {
+        return res.status(400).json({ error: 'Valid public HTTP(S) URL is required.' });
+      }
       if (!url || typeof url !== 'string') {
         return res.status(400).json({ error: 'Valid URL is required' });
       }
@@ -1707,23 +1747,20 @@ async function startServer() {
       const cleanInputUrl = url.trim();
       const lower = cleanInputUrl.toLowerCase();
 
-      if (lower.includes('tiktok.com') || lower.includes('douyin.com')) {
+      const inputHost = new URL(cleanInputUrl).hostname.toLowerCase();
+      if (inputHost === 'tiktok.com' || inputHost.endsWith('.tiktok.com') || inputHost === 'douyin.com' || inputHost.endsWith('.douyin.com')) {
         const data = await extractTikTok(cleanInputUrl);
         return res.json({ success: true, data });
       }
 
       if (
-        lower.includes('twitter.com') ||
-        lower.includes('x.com') ||
-        lower.includes('fxtwitter.com') ||
-        lower.includes('vxtwitter.com') ||
-        lower.includes('fixupx.com')
+        ['x.com', 'twitter.com', 'mobile.twitter.com', 'fxtwitter.com', 'vxtwitter.com', 'fixupx.com'].includes(inputHost)
       ) {
         const data = await extractTwitter(cleanInputUrl);
         return res.json({ success: true, data });
       }
 
-      if (lower.includes('threads.net') || lower.includes('threads.com')) {
+      if (inputHost === 'threads.net' || inputHost.endsWith('.threads.net') || inputHost === 'threads.com' || inputHost.endsWith('.threads.com')) {
         const data = await extractThreads(cleanInputUrl);
         return res.json({ success: true, data });
       }
@@ -1737,7 +1774,7 @@ async function startServer() {
       let platformName = 'Social';
       let instagramMethod = '';
       let instagramThumbnail = '';
-      if (lower.includes('instagram.com') || lower.includes('instagr.am')) {
+      if (inputHost === 'instagram.com' || inputHost.endsWith('.instagram.com') || inputHost === 'instagr.am') {
         platformName = 'Instagram';
         try {
           raw = await btchIgdlWithTimeout(cleanInputUrl, btch);
@@ -1750,7 +1787,7 @@ async function startServer() {
           console.warn(`[instagram] btch.igdl failed (${err?.message || 'unknown error'}), trying embed fallbacks`);
           raw = null;
         }
-      } else if (lower.includes('facebook.com') || lower.includes('fb.watch') || lower.includes('fb.com')) {
+      } else if (inputHost === 'facebook.com' || inputHost.endsWith('.facebook.com') || inputHost === 'fb.watch' || inputHost === 'fb.com') {
         platformName = 'Facebook';
         raw = await btch.fbdown(cleanInputUrl);
       }
@@ -1872,12 +1909,14 @@ async function startServer() {
         return res.status(403).send('Invalid or restricted HLS URL');
       }
 
+      const upstreamTimeout = withTimeoutSignal(30000);
       const upstream = await fetch(targetUrl, {
         headers: {
           'User-Agent': X_USER_AGENT,
           Referer: 'https://x.com/',
         },
-      });
+        signal: upstreamTimeout.signal,
+      }).finally(upstreamTimeout.cleanup);
 
       if (!upstream.ok) {
         return res.status(upstream.status).send(`HLS upstream error: ${upstream.status}`);
@@ -1953,6 +1992,20 @@ async function startServer() {
     return res.status(200).end();
   });
 
+  const ffmpegMaxConcurrent = Math.max(1, Number(process.env.FFMPEG_MAX_CONCURRENT) || 2);
+  const ffmpegTimeoutMs = Math.max(10000, Number(process.env.FFMPEG_TIMEOUT_MS) || 120000);
+  let activeFfmpegJobs = 0;
+  let ffmpegAvailable: boolean | null = null;
+  const ffmpegCheck = spawn('ffmpeg', ['-version'], { stdio: 'ignore' });
+  ffmpegCheck.on('error', () => {
+    ffmpegAvailable = false;
+    console.error('ffmpeg is unavailable on PATH; MP3/remux endpoints will return 503.');
+  });
+  ffmpegCheck.on('close', (code) => {
+    ffmpegAvailable = code === 0;
+    if (!ffmpegAvailable) console.error('ffmpeg startup check failed; MP3/remux endpoints will return 503.');
+  });
+
   app.get('/api/hls-download', (req, res) => {
     const targetUrl = req.query.url as string;
     const format = String(req.query.format || 'mp4').toLowerCase();
@@ -1964,6 +2017,9 @@ async function startServer() {
       return res.status(403).send('Invalid or restricted HLS URL');
     }
 
+    if (ffmpegAvailable === false) return res.status(503).send('MP3/remux is unavailable: ffmpeg is not installed on the backend.');
+    if (activeFfmpegJobs >= ffmpegMaxConcurrent) return res.status(503).send('The media converter is busy. Please retry shortly.');
+    activeFfmpegJobs += 1;
     const headerArg = `Referer: ${getUpstreamReferer(targetUrl)}\r\nUser-Agent: ${X_USER_AGENT}\r\n`;
     const args: string[] = ['-y', '-loglevel', 'error', '-headers', headerArg, '-i', targetUrl];
 
@@ -2008,6 +2064,18 @@ async function startServer() {
     const ff = spawn('ffmpeg', args);
     let headersSent = false;
     let stderrBuf = '';
+    let jobSettled = false;
+    const jobTimer = setTimeout(() => {
+      ff.kill('SIGTERM');
+      if (!headersSent && !res.headersSent) res.status(504).send('Media conversion timed out.');
+      else res.end();
+    }, ffmpegTimeoutMs);
+    const finishJob = () => {
+      if (jobSettled) return;
+      jobSettled = true;
+      clearTimeout(jobTimer);
+      activeFfmpegJobs = Math.max(0, activeFfmpegJobs - 1);
+    };
 
     ff.stderr.on('data', (chunk) => {
       if (stderrBuf.length < 2000) {
@@ -2026,6 +2094,7 @@ async function startServer() {
     });
 
     ff.on('error', (err) => {
+      finishJob();
       console.error('ffmpeg spawn error:', err);
       if (!headersSent && !res.headersSent) {
         res.status(500).send('Media remuxer failed to start');
@@ -2035,6 +2104,7 @@ async function startServer() {
     });
 
     ff.on('close', (code) => {
+      finishJob();
       if (!headersSent && !res.headersSent) {
         console.error('ffmpeg exited before output:', code, stderrBuf);
         const noAudio = /does not contain any stream|audio/i.test(stderrBuf) && format === 'mp3';
@@ -2051,9 +2121,8 @@ async function startServer() {
     });
 
     res.on('close', () => {
-      if (!ff.killed) {
-        ff.kill('SIGTERM');
-      }
+      if (!ff.killed) ff.kill('SIGTERM');
+      finishJob();
     });
   });
 
@@ -2073,12 +2142,16 @@ async function startServer() {
         return res.status(403).send('Invalid or restricted target URL');
       }
 
-      const upstream = await fetch(targetUrl, {
-        headers: {
-          'User-Agent': X_USER_AGENT,
-          Referer: getUpstreamReferer(targetUrl),
-        },
-      });
+      const upstreamTimeout = withTimeoutSignal(30000);
+      let upstream: Response;
+      try {
+        upstream = await fetch(targetUrl, {
+          headers: { 'User-Agent': X_USER_AGENT, Referer: getUpstreamReferer(targetUrl) },
+          signal: upstreamTimeout.signal,
+        });
+      } finally {
+        upstreamTimeout.cleanup();
+      }
 
       if (!upstream.ok) {
         return res.status(upstream.status).send(`Upstream returned HTTP ${upstream.status}`);
@@ -2124,7 +2197,13 @@ async function startServer() {
         reqHeaders['Range'] = req.headers.range;
       }
 
-      const upstream = await fetch(targetUrl, { headers: reqHeaders });
+      const upstreamTimeout = withTimeoutSignal(30000);
+      let upstream: Response;
+      try {
+        upstream = await fetch(targetUrl, { headers: reqHeaders, signal: upstreamTimeout.signal });
+      } finally {
+        upstreamTimeout.cleanup();
+      }
 
       if (!upstream.ok && upstream.status !== 206) {
         return res.status(upstream.status).send(`Upstream stream returned HTTP ${upstream.status}`);

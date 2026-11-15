@@ -72,7 +72,6 @@ export default function App() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestCounterRef = useRef(0);
-  const routeNonceRef = useRef(0);
 
   // QR Modal State
   const [qrModal, setQrModal] = useState<{ isOpen: boolean; url: string; title: string }>({
@@ -93,7 +92,14 @@ export default function App() {
 
   const history = localHistory;
 
-  const [platformRoute, setPlatformRoute] = useState<{ url: string; nonce: number } | null>(null);
+  const [addressBarUrl] = useState(() => {
+    const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    const blocked = new Set(['guides', 'history', 'instagram', 'tiktok', 'facebook', 'threads', 'mp3', 'faq', 'batch']);
+    const match = path.match(/^([^/]+)\/status\/(\d+)$/i);
+    return match && !blocked.has(match[1].toLowerCase())
+      ? `https://x.com/${match[1]}/status/${match[2]}`
+      : '';
+  });
 
   const cancelInFlight = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -106,16 +112,13 @@ export default function App() {
     cancelInFlight();
     setAnalyzedMedia(null);
     setExtractError(null);
-    setPlatformRoute(null);
   }, [cancelInFlight]);
 
-  const handlePlatformDetected = (platform: 'tiktok' | 'instagram' | 'facebook' | 'threads', detectedUrl: string) => {
+  const handlePlatformDetected = (platform: 'tiktok' | 'instagram' | 'facebook' | 'threads', _detectedUrl: string) => {
     cancelInFlight();
     setAnalyzedMedia(null);
-    setExtractError(null);
-    const clean = detectedUrl.trim();
-    setPlatformRoute(clean ? { url: clean, nonce: ++routeNonceRef.current } : null);
-    setActiveTab(platform);
+    setExtractError('This platform is not verified on the free static site.');
+    setActiveTab('home');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -158,6 +161,13 @@ export default function App() {
       abortControllerRef.current?.abort();
     };
   }, []);
+
+  // Firebase Hosting rewrites deep links to the SPA. Analyse direct X status paths.
+  useEffect(() => {
+    if (!addressBarUrl) return;
+    setActiveTab('home');
+    window.setTimeout(() => handleAnalyze(addressBarUrl), 0);
+  }, [addressBarUrl]);
 
   // Handle URL analysis with real extraction and race-condition protection
   const handleAnalyze = async (url: string) => {
@@ -282,8 +292,7 @@ export default function App() {
             history={history}
             onClearHistory={handleClearHistory}
             onSelectUrl={(url) => {
-              setPlatformRoute(null);
-              setActiveTab('home');
+                        setActiveTab('home');
               handleAnalyze(url);
             }}
             currentLang={currentLang}
@@ -291,15 +300,11 @@ export default function App() {
         ) : activeTab === 'instagram' || activeTab === 'tiktok' || activeTab === 'facebook' || activeTab === 'threads' ? (
           <PlatformDownloaderView
             platformSlug={activeTab}
-            currentLang={currentLang}
-            onOpenQr={handleOpenQr}
-            onSaveDownload={handleSaveDownload}
             onSelectPlatform={(slug) => {
               resetExtractionState();
               setActiveTab(slug);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            initialRoute={platformRoute}
           />
         ) : (
           <>

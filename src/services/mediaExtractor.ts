@@ -212,14 +212,17 @@ async function resolveTcoUrl(shortUrl: string, signal?: AbortSignal): Promise<st
     try {
       const res = await fetch(shortUrl, { method: 'GET', redirect: 'follow', signal: timeoutSignal });
       const finalUrl = res?.url || '';
-      if (finalUrl && finalUrl !== shortUrl && !/^https?:\/\/t\.co\//i.test(finalUrl)) {
-        return finalUrl;
-      }
-      return null;
+      if (!finalUrl || finalUrl === shortUrl || /^https?:\/\/t\.co\//i.test(finalUrl)) return null;
+      const parsed = new URL(finalUrl);
+      const host = parsed.hostname.toLowerCase();
+      if (!['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com'].includes(host)) return null;
+      if (!/\/status\/\d+/.test(parsed.pathname) && !/\/i\/(spaces|broadcasts|events)\//i.test(parsed.pathname)) return null;
+      return parsed.toString();
     } finally {
       cleanup();
     }
-  } catch {
+  } catch (err: any) {
+    if (signal?.aborted) throw err;
     return null;
   }
 }
@@ -343,10 +346,10 @@ function buildTwitterMp3Format(sourceUrl: string, handle: string, durationSec: n
   const safeHandle = (handle || 'x_audio').replace(/[^a-zA-Z0-9_]/g, '') || 'x_audio';
   return {
     id: 'tw_mp3',
-    label: 'Extract Audio (MP3 320k)',
+    label: 'MP3 audio (backend required)',
     type: 'audio',
-    quality: '320 kbps MP3',
-    bitrate: '320kbps MP3',
+    quality: 'MP3 · approx. 192 kbps VBR',
+    bitrate: 'Approx. 192 kbps VBR',
     sizeMb: Math.max(0.4, Number(((durationSec * 192000) / (8 * 1048576)).toFixed(1))),
     format: 'MP3',
     isPopular: false,
@@ -479,8 +482,6 @@ async function extractTwitterMedia(cleanUrl: string, lang: Language, signal?: Ab
     throw new Error(getLocalizedError(lang, 'noPath'));
   }
 
-  let tweetReferencesStreamOrSpace = false;
-
   // 1. Primary: FxTwitter public API (CORS enabled) for fast direct MP4 + MP3 tweet extraction
   try {
     const fxData = await fetchJsonWithTimeout(
@@ -502,15 +503,6 @@ async function extractTwitterMedia(cleanUrl: string, lang: Language, signal?: Ab
       const videos = pickVideos(tweet);
       const quoteVideos = videos.length === 0 && tweet.quote ? pickVideos(tweet.quote) : [];
       const primaryVideo = videos[0] || quoteVideos[0];
-
-      // Check if tweet text/facets reference a Space, Broadcast, or Live Event
-      const facetUrls = Array.isArray(tweet.raw_text?.facets)
-        ? tweet.raw_text.facets.map((f: any) => `${f?.replacement || ''} ${f?.original || ''}`).join(' ')
-        : '';
-      const combinedText = `${tweet.text || ''} ${facetUrls} ${tweet.quote?.text || ''}`;
-      if (/\/i\/(?:spaces|broadcasts|events)\//i.test(combinedText)) {
-        tweetReferencesStreamOrSpace = true;
-      }
 
       if (primaryVideo && isValidMediaStreamUrl(primaryVideo.url)) {
         const durationSec = Math.max(1, Math.round(Number(primaryVideo.duration) || 15));
@@ -1008,9 +1000,16 @@ async function extractMetaPlatformMedia(
     const { data, backendError, backendUnavailable } = await callBackendXExtract(cleanUrl, signal);
     if (data) return data;
     if (backendUnavailable) backendWasUnavailable = true;
-    if (backendError) {
-      throw new Error(backendError);
-    }
+    if (backendError) throw new Error(backendError);
+  }
+
+  // Firebase Hosting is static-only. Do not call third-party browser endpoints
+  // for platforms whose extraction has not been verified on the live site.
+  if ((platform === 'instagram' || platform === 'facebook') && !getApiBaseUrl()) {
+    const { data, backendUnavailable, backendError } = await callBackendXExtract(cleanUrl, signal);
+    if (data) return data;
+    if (backendUnavailable) throw new Error(getBackendUnavailableError(lang));
+    if (backendError) throw new Error(backendError);
   }
 
   // For Instagram, the backend is authoritative: it now tries btch.igdl,

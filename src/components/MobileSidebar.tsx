@@ -203,38 +203,13 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
                     <Sparkles className="w-4 h-4" />
                   </div>
                   <div>
-                    <div>{currentLang === 'ar' ? 'الرئيسية (All-In-One)' : 'All-In-One Downloader'}</div>
+                    <div>{currentLang === 'ar' ? 'الفيديو' : 'X / Twitter video'}</div>
                     <div className="text-[10px] text-[#536471] dark:text-[#8b98a5] font-normal">
-                      {currentLang === 'ar' ? 'تحميل فيديو لجميع الشبكات' : 'Universal Video Extractor'}
+                      {currentLang === 'ar' ? 'تنزيل مقاطع الفيديو العامة' : 'Public video links'}
                     </div>
                   </div>
                 </div>
                 {activeTab === 'home' && <span className="w-2 h-2 rounded-full bg-[#1d9bf0]" />}
-              </button>
-
-              {/* Row 2: Twitter to MP3 */}
-              <button
-                onClick={() => handleSelectTab('mp3')}
-                className={`w-full text-left rtl:text-right px-3.5 py-3 rounded-xl text-sm font-bold flex items-center justify-between transition-all ${
-                  activeTab === 'mp3'
-                    ? 'bg-[#ffad1f]/15 text-[#ffad1f]'
-                    : 'text-[#0f1419] dark:text-[#cfd9de] hover:bg-[#eff3f4] dark:hover:bg-[#1e2732]'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeTab === 'mp3' ? 'bg-[#ffad1f] text-white' : 'bg-[#eff3f4] dark:bg-[#1e2732] text-[#536471] dark:text-[#8b98a5]'}`}>
-                    <Music className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div>{t.navMp3}</div>
-                    <div className="text-[10px] text-[#536471] dark:text-[#8b98a5] font-normal">
-                      {currentLang === 'ar' ? 'استخراج صوت MP3 بجودة 320k' : '320kbps Audio Extractor'}
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[10px] font-black uppercase bg-[#ffad1f]/20 text-[#ffad1f] px-2 py-0.5 rounded-full">
-                  320k
-                </span>
               </button>
 
               {/* Row 3: Saved Downloads */}
@@ -288,14 +263,7 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
             </nav>
           </div>
 
-          {/* Section 3: Other Supported Platforms (المنصات المدعومة كأداة تحميل سريعة) */}
-          <div>
-            <div className="text-[11px] font-bold text-[#536471] dark:text-[#8b98a5] uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-              <Film className="w-3.5 h-3.5 text-[#00ba7c]" />
-              <span>{currentLang === 'ar' ? 'منصات التواصل الأخرى' : 'Other Platforms'}</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
+          {/* Section 3: Language Selector */}
               {/* TikTok */}
               <button
                 onClick={() => handleSelectTab('tiktok')}
@@ -347,9 +315,6 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
                 <span className="w-2.5 h-2.5 rounded-full bg-[#A855F7] shrink-0" />
                 <span>Threads</span>
               </button>
-            </div>
-          </div>
-
           {/* Section 4: Language Selector as Clean Rows (على شكل أسطر) */}
           <div>
             <div className="text-[11px] font-bold text-[#536471] dark:text-[#8b98a5] uppercase tracking-wider mb-2.5 flex items-center gap-1.5">

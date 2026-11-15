@@ -24,7 +24,7 @@ import {
 import Hls from 'hls.js';
 import { TweetMediaData, MediaFormat, Language } from '../types';
 import { translations } from '../data/translations';
-import { isValidMediaStreamUrl, resolveApiUrl } from '../services/mediaExtractor';
+import { getApiBaseUrl, isValidMediaStreamUrl, resolveApiUrl } from '../services/mediaExtractor';
 
 interface MediaResultCardProps {
   media: TweetMediaData;
@@ -61,16 +61,32 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
   const [downloadComplete, setDownloadComplete] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [backendAvailable, setBackendAvailable] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
   const previewStreamFallbackTriedRef = useRef(false);
+  const previewStreamFallbackCountRef = useRef(0);
   const t = translations[currentLang];
 
   const isHlsUrl = (u?: string | null) =>
     Boolean(u && (u.includes('.m3u8') || u.includes('/api/hls-proxy')));
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(resolveApiUrl('/api/health'), { cache: 'no-store', signal: controller.signal })
+      .then(async (res) => {
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        if (!res.ok || !contentType.includes('application/json')) return false;
+        const payload = await res.json();
+        return payload?.status === 'ok';
+      })
+      .then(setBackendAvailable)
+      .catch(() => setBackendAvailable(false));
+    return () => controller.abort();
+  }, []);
 
   // Reset all local media/player state and wire HLS playback whenever media changes
   useEffect(() => {
@@ -82,6 +98,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
     }
 
     previewStreamFallbackTriedRef.current = false;
+    previewStreamFallbackCountRef.current = 0;
     setIsPlaying(false);
     setIsMuted(false);
     setCurrentTime(0);
@@ -146,31 +163,28 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
     const targetEl: HTMLMediaElement | null = media.isSpaces ? audioRef.current : videoRef.current;
 
     if (
-      !previewStreamFallbackTriedRef.current &&
-      targetEl &&
-      rawStreamUrl &&
-      /^https?:\/\//i.test(rawStreamUrl) &&
-      !isHlsUrl(rawStreamUrl)
+      targetEl && rawStreamUrl && /^https?:\/\//i.test(rawStreamUrl) && !isHlsUrl(rawStreamUrl) &&
+      previewStreamFallbackCountRef.current < 2
     ) {
+      const attempt = previewStreamFallbackCountRef.current++;
       previewStreamFallbackTriedRef.current = true;
-      try {
-        const healthRes = await fetch(resolveApiUrl('/api/health'), { cache: 'no-store' });
-        const ct = (healthRes.headers.get('content-type') || '').toLowerCase();
-        if (healthRes.ok && ct.includes('application/json')) {
-          targetEl.src = resolveApiUrl(`/api/stream-media?url=${encodeURIComponent(rawStreamUrl)}`);
-          targetEl.load();
-          return;
-        }
-      } catch {
-        // Backend unavailable (static hosting) — fall through to error banner
+      if (attempt === 0 && backendAvailable) {
+        targetEl.src = resolveApiUrl(`/api/stream-media?url=${encodeURIComponent(rawStreamUrl)}`);
+        targetEl.load();
+        return;
+      }
+      if (targetEl.src !== rawStreamUrl) {
+        targetEl.src = rawStreamUrl;
+        targetEl.load();
+        return;
       }
     }
 
     setIsPlaying(false);
     setVideoError(
       media.isSpaces
-        ? 'Space audio preview unavailable. Use the download buttons below.'
-        : 'Browser could not play this video stream directly. Try the download options below.'
+        ? 'Space audio preview is not available on this static site.'
+        : 'This video stream cannot be previewed in this browser. Use the source download link below.'
     );
   };
 
@@ -311,6 +325,10 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
       format.directUrl ||
       (format.type === 'audio' ? media.audioUrl : media.videoUrl);
 
+    if (rawTargetUrl?.includes('/api/hls-download') && !backendAvailable) {
+      setDownloadError('MP3 conversion requires the Express backend. It is not available on static Firebase Hosting.');
+      return;
+    }
     if (!isValidMediaStreamUrl(rawTargetUrl)) {
       setDownloadError('No valid downloadable media URL was found for this format.');
       return;
@@ -498,21 +516,23 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
         <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-inner group">
           {media.isSpaces ? (
             <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0f1419] via-[#15202b] to-[#1e2732] p-6 text-white text-center">
+              {videoError && <p role="status" className="text-sm text-[#cfd9de] mb-3">{videoError}</p>}
               <audio
                 key={media.audioUrl || media.videoUrl}
                 ref={audioRef}
                 playsInline
                 preload="metadata"
                 onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                onStalled={handlePreviewMediaError}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 onError={handlePreviewMediaError}
               />
-              <div className="w-16 h-16 rounded-full bg-[#1d9bf0]/20 border border-[#1d9bf0] flex items-center justify-center mb-3 animate-pulse">
+              <div className="w-16 h-16 rounded-full bg-[#1d9bf0]/20 border border-[#1d9bf0] flex items-center justify-center mb-3">
                 <Music className="w-8 h-8 text-[#1d9bf0]" />
               </div>
-              <span className="text-lg font-bold">X Spaces Broadcast Audio</span>
-              <span className="text-xs text-[#8b98a5] mt-1">Original AAC / 320kbps MP3 Audio Stream</span>
+              <span className="text-lg font-bold">X Spaces audio</span>
+              <span className="text-xs text-[#8b98a5] mt-1">Audio format and bitrate depend on the source.</span>
 
               <div className="flex items-center gap-1 mt-4 h-12">
                 {[40, 70, 25, 90, 60, 85, 30, 95, 50, 80, 45, 100, 65, 35, 75, 55, 90, 40].map((h, i) => (
@@ -540,6 +560,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
               preload="metadata"
               onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
               onError={handlePreviewMediaError}
+              onStalled={handlePreviewMediaError}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
               className="w-full h-full object-contain"
@@ -732,10 +753,10 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
 
                   <div className="min-w-0 flex-1">
                     <div className="font-extrabold text-xs sm:text-sm text-[#0f1419] dark:text-white leading-tight">
-                      {fmt.label}
+                      {fmt.type === 'audio' && !backendAvailable ? `${fmt.format} audio (backend required)` : fmt.label}
                     </div>
                     <div className="text-[11px] sm:text-xs text-[#536471] dark:text-[#8b98a5] font-mono tabular-nums mt-0.5">
-                      {fmt.resolution || fmt.bitrate || fmt.quality} · {fmt.sizeMb} MB · {fmt.format}
+                      {fmt.type === 'audio' && !backendAvailable ? 'Unavailable without Express backend' : `${fmt.resolution || fmt.bitrate || fmt.quality} · ${fmt.sizeMb} MB · ${fmt.format}`}
                     </div>
                   </div>
                 </div>
@@ -749,7 +770,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
                   )}
                   <button
                     type="button"
-                    disabled={isDownloadingThis}
+                    disabled={isDownloadingThis || (fmt.type === 'audio' && !backendAvailable)}
                     onClick={() => handleDownload(fmt)}
                     className={`touch-target px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs shrink-0 active:scale-95 ${
                       fmt.isPopular
@@ -769,7 +790,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
         {/* Copy Direct Link Button */}
         <div className="mt-4 pt-4 border-t border-[#eff3f4] dark:border-[#2f3336] flex flex-wrap items-center justify-between gap-3 text-xs text-[#536471] dark:text-[#8b98a5]">
           <div className="flex items-center gap-2">
-            <span>Original source bitstream</span>
+            <span>Source media</span>
             <span>·</span>
             <span>0% Watermark</span>
           </div>
