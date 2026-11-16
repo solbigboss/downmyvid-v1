@@ -50,7 +50,8 @@ test('Instagram anonymous GraphQL uses LSD and exact BigInt media id', async () 
     calls.push(input);
     if (input === url) return response('<html>No embedded media</html>');
     if (input === 'https://www.instagram.com/') return response(script({ require: [['LSD', [], { token: 'public-token' }]] }));
-    assert.equal(input, 'https://www.instagram.com/api/graphql');
+    assert.equal(input, 'https://www.instagram.com/api/graphql/');
+    assert.equal(init.headers['User-Agent'], 'DownMyVid/1.0');
     const body = new URLSearchParams(init.body);
     assert.equal(body.get('doc_id'), '27130156389949648');
     const id = JSON.parse(body.get('variables')).media_id;

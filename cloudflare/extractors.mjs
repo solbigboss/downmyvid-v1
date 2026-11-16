@@ -295,12 +295,13 @@ async function anonymousIg(target, fetchImpl) {
   if (!token || !/^[A-Za-z0-9_-]{1,256}$/.test(token)) throw new Error('Instagram did not provide an anonymous public token.');
   const friendlyName = 'PolarisLoggedOutDesktopWWWPostRootContentQuery';
   const body = new URLSearchParams({ lsd: token, doc_id: '27130156389949648', variables: JSON.stringify({ media_id: target.mediaId }), server_timestamps: 'true', fb_api_caller_class: 'RelayModern', fb_api_req_friendly_name: friendlyName });
-  const response = await requestText('https://www.instagram.com/api/graphql', fetchImpl, {
+  const response = await requestText('https://www.instagram.com/api/graphql/', fetchImpl, {
     method: 'POST', body: body.toString(), headers: {
+      // A fabricated browser UA makes this endpoint return the website shell.
+      'User-Agent': 'DownMyVid/1.0', Accept: '*/*',
       'Content-Type': 'application/x-www-form-urlencoded', 'X-FB-LSD': token,
-      'X-IG-App-ID': '936619743392459', 'X-ASBD-ID': '359341', 'X-IG-WWW-Claim': '0',
-      'X-FB-Friendly-Name': friendlyName, 'X-Requested-With': 'XMLHttpRequest',
-      Origin: 'https://www.instagram.com', Referer: `https://www.instagram.com/p/${target.id}/`,
+      'X-IG-App-ID': '936619743392459',
+      Origin: 'https://www.instagram.com', Referer: `https://www.instagram.com/reel/${target.id}/`,
     },
   });
   let data;
