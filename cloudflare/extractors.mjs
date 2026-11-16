@@ -1,6 +1,6 @@
 // Public, anonymous Meta extraction. No cookies, credentials, or external downloader.
 const MAX_BYTES = 2 * 1024 * 1024;
-const TIMEOUT_MS = 12_000;
+const TIMEOUT_MS = 8_000;
 const MAX_DEPTH = 48;
 const MAX_NODES = 40_000;
 const SOURCE_HOSTS = new Set([
@@ -280,8 +280,17 @@ function result(media, target, originalUrl, meta) {
   };
 }
 
+function failure(code, message) {
+  return Object.assign(new Error(message), { code });
+}
+
+async function stage(code, work) {
+  try { return await work(); }
+  catch (error) { if (error?.code) throw error; throw failure(code, 'The upstream extraction stage failed.'); }
+}
+
 async function anonymousIg(target, fetchImpl) {
-  const homepage = await requestText('https://www.instagram.com/', fetchImpl);
+  const homepage = await stage('IG_BOOTSTRAP_FAILED', () => requestText('https://www.instagram.com/', fetchImpl));
   let token;
   visit(jsonDocuments(homepage.text), value => {
     if (Array.isArray(value) && value[0] === 'LSD' && typeof value[2]?.token === 'string') token = value[2].token;
@@ -292,10 +301,10 @@ async function anonymousIg(target, fetchImpl) {
   }
   // LSD is also emitted in a short bootstrap tuple outside data-sjs scripts.
   token ||= /"LSD",\s*\[\s*\],\s*\{\s*"token"\s*:\s*"([A-Za-z0-9_-]{1,256})"/.exec(homepage.text)?.[1];
-  if (!token || !/^[A-Za-z0-9_-]{1,256}$/.test(token)) throw new Error('Instagram did not provide an anonymous public token.');
+  if (!token || !/^[A-Za-z0-9_-]{1,256}$/.test(token)) throw failure('IG_TOKEN_MISSING', 'Instagram did not provide an anonymous public token.');
   const friendlyName = 'PolarisLoggedOutDesktopWWWPostRootContentQuery';
   const body = new URLSearchParams({ lsd: token, doc_id: '27130156389949648', variables: JSON.stringify({ media_id: target.mediaId }), server_timestamps: 'true', fb_api_caller_class: 'RelayModern', fb_api_req_friendly_name: friendlyName });
-  const response = await requestText('https://www.instagram.com/api/graphql/', fetchImpl, {
+  const response = await stage('IG_QUERY_FAILED', () => requestText('https://www.instagram.com/api/graphql/', fetchImpl, {
     method: 'POST', body: body.toString(), headers: {
       // A fabricated browser UA makes this endpoint return the website shell.
       'User-Agent': 'DownMyVid/1.0', Accept: '*/*',
@@ -303,11 +312,13 @@ async function anonymousIg(target, fetchImpl) {
       'X-IG-App-ID': '936619743392459',
       Origin: 'https://www.instagram.com', Referer: `https://www.instagram.com/reel/${target.id}/`,
     },
-  });
+  }));
   let data;
   try { data = JSON.parse(response.text.replace(/^for\s*\(;;\);\s*/, '')); }
-  catch { throw new Error('Instagram returned no public media JSON.'); }
-  return igMedia([data], target);
+  catch { throw failure('IG_NON_JSON_RESPONSE', 'Instagram returned a webpage instead of public video data.'); }
+  const media = igMedia([data], target);
+  if (!media) throw failure('IG_MEDIA_UNAVAILABLE', 'Instagram did not provide the requested public video.');
+  return media;
 }
 
 /** Extract only the requested public post; errors are safe to display (no CDN URLs). */
@@ -334,7 +345,12 @@ export async function extractPost(value, fetchImpl = fetch) {
   const docs = jsonDocuments(page.text);
   let media = target.platform === 'instagram' ? igMedia(docs, target) : fbMedia(docs, target);
   if (target.platform === 'instagram' && (!media || !(media.video_versions?.length || media.video_url))) {
-    media = await anonymousIg(target, fetchImpl);
+    try { media = await anonymousIg(target, fetchImpl); }
+    catch (error) {
+      // One retry with fresh anonymous bootstrap; never loop on login/private data.
+      if (!['IG_BOOTSTRAP_FAILED', 'IG_TOKEN_MISSING', 'IG_QUERY_FAILED', 'IG_NON_JSON_RESPONSE'].includes(error?.code)) throw error;
+      media = await anonymousIg(target, fetchImpl);
+    }
   }
   if (!media) throw new Error('No public video for the requested post was found; it may be private, removed, or require login.');
   return result(media, target, original.href, meta);

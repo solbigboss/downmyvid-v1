@@ -63,6 +63,25 @@ test('Instagram anonymous GraphQL uses LSD and exact BigInt media id', async () 
   assert.equal(result.formats.length, 1);
 });
 
+test('Instagram retries non-JSON once with fresh bootstrap and exposes safe diagnostic', async () => {
+  let queries = 0; let bootstraps = 0;
+  const mock = async input => {
+    if (input === ig) return response('<html>No media</html>');
+    if (input === 'https://www.instagram.com/') { bootstraps++; return response(script({ require: [['LSD', [], { token: 'public-token' }]] })); }
+    queries++;
+    return queries === 1 ? response('<html>temporary shell</html>') : new Response(JSON.stringify(igData()));
+  };
+  assert.equal((await extractPost(ig, mock)).formats.length, 1);
+  assert.equal(queries, 2); assert.equal(bootstraps, 2);
+  queries = 0;
+  await assert.rejects(extractPost(ig, async input => {
+    if (input === ig) return response('<html>No media</html>');
+    if (input === 'https://www.instagram.com/') return response(script({ require: [['LSD', [], { token: 'public-token' }]] }));
+    queries++; return response('<html>shell</html>');
+  }), error => error.code === 'IG_NON_JSON_RESPONSE');
+  assert.equal(queries, 2);
+});
+
 test('Facebook selects matching ID and excludes recommendations', async () => {
   const data = { recommended: { id: '999', browser_native_hd_url: 'https://video.xx.fbcdn.net/wrong.mp4' },
     current: { id: '123456', browser_native_hd_url: cdn, browser_native_sd_url: 'https://video.xx.fbcdn.net/sd.mp4', owner: { name: 'Author' } } };

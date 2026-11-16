@@ -80,7 +80,13 @@ export default {
     if (origin && !allowed.includes(origin)) return json({ error: 'Origin not allowed.' }, 403);
     let response;
     if (request.method === 'OPTIONS') response = new Response(null, { status: 204 });
-    else try { response = await route(request, env); } catch (error) { response = json({ error: error?.code === 'INVALID_URL' ? 'Paste a public Instagram or Facebook video post URL.' : 'The platform did not provide a public video from this server. The post may require login or the platform may be blocking requests.', code: error?.code || 'EXTRACTION_FAILED' }, error?.code === 'INVALID_URL' ? 400 : 422); }
+    else try { response = await route(request, env); } catch (error) {
+      const codes = new Set(['INVALID_URL', 'IG_BOOTSTRAP_FAILED', 'IG_TOKEN_MISSING', 'IG_QUERY_FAILED', 'IG_NON_JSON_RESPONSE', 'IG_MEDIA_UNAVAILABLE']);
+      const code = codes.has(error?.code) ? error.code : 'EXTRACTION_FAILED';
+      const requestId = crypto.randomUUID();
+      console.warn(JSON.stringify({ event: 'extraction_failed', code, requestId }));
+      response = json({ error: code === 'INVALID_URL' ? 'Paste a public Instagram or Facebook video post URL.' : `The platform could not return this video. Error: ${code}. Reference: ${requestId}.`, code, requestId }, code === 'INVALID_URL' ? 400 : 422);
+    }
     const headers = new Headers(response.headers);
     if (origin) headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Vary', 'Origin');
