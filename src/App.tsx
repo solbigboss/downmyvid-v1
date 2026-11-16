@@ -114,7 +114,13 @@ export default function App() {
     setExtractError(null);
   }, [cancelInFlight]);
 
-  const handlePlatformDetected = (platform: 'tiktok' | 'instagram' | 'facebook' | 'threads', _detectedUrl: string) => {
+  const handlePlatformDetected = (platform: 'tiktok' | 'instagram' | 'facebook' | 'threads', detectedUrl: string) => {
+    if (platform === 'instagram' || platform === 'facebook') {
+      setActiveTab('home');
+      void handleAnalyze(detectedUrl);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     cancelInFlight();
     setAnalyzedMedia(null);
     setExtractError('This platform is not verified on the free static site.');
@@ -299,7 +305,11 @@ export default function App() {
           />
         ) : activeTab === 'instagram' || activeTab === 'tiktok' || activeTab === 'facebook' || activeTab === 'threads' ? (
           <PlatformDownloaderView
+            key={activeTab}
             platformSlug={activeTab}
+            currentLang={currentLang}
+            onOpenQr={handleOpenQr}
+            onSaveDownload={handleSaveDownload}
             onSelectPlatform={(slug) => {
               resetExtractionState();
               setActiveTab(slug);
