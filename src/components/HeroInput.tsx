@@ -33,7 +33,6 @@ export const HeroInput: React.FC<HeroInputProps> = ({
   isLoading,
   extractError,
   onClearError,
-  onPlatformDetected,
 }) => {
   const [url, setUrl] = useState('');
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
@@ -80,20 +79,22 @@ export const HeroInput: React.FC<HeroInputProps> = ({
   }, [activeTab]);
 
   // Check URL platform and trigger seamless in-app redirection cleanly
-  const checkAndRouteUrl = (rawUrl: string, immediate = false): boolean => {
+  const checkAndRouteUrl = (rawUrl: string): boolean => {
     clearPendingRedirect();
     const normalized = normalizeUrlInput(rawUrl);
     const platform = detectPlatformFromUrl(normalized);
 
-    if (platform && platform !== 'x') {
-      const labels: Record<'tiktok' | 'instagram' | 'facebook' | 'threads', string> = {
-        tiktok: 'TikTok extraction is not verified on the free static site.',
-        instagram: 'Instagram extraction is not verified on the free static site and requires a backend.',
-        facebook: 'Facebook extraction is not verified on the free static site and requires a backend.',
-        threads: 'Threads extraction is not verified on the free static site.',
-      };
-      setRedirectNotice(labels[platform]);
+    if (platform === 'tiktok' || platform === 'threads') {
+      setRedirectNotice(platform === 'tiktok'
+        ? 'TikTok extraction is not verified on the free static site.'
+        : 'Threads extraction is not verified on the free static site.');
       return true;
+    }
+
+    setRedirectNotice(null);
+    if (platform === 'instagram' || platform === 'facebook') {
+      setSelectedPlatform(platform);
+      return false;
     }
 
     const lower = normalized.toLowerCase();
@@ -111,6 +112,7 @@ export const HeroInput: React.FC<HeroInputProps> = ({
   };
 
   const handlePaste = async () => {
+    if (isLoading) return;
     setErrorNotice(null);
     onClearError?.();
     try {
@@ -123,10 +125,11 @@ export const HeroInput: React.FC<HeroInputProps> = ({
           window.setTimeout(() => setPasteSuccess(false), 2000);
           if (navigator.vibrate) navigator.vibrate(20);
 
-          const redirected = checkAndRouteUrl(clean, false);
+          const redirected = checkAndRouteUrl(clean);
           if (redirected) return;
 
-          if (detectPlatformFromUrl(clean) === 'x') {
+          const platform = detectPlatformFromUrl(clean);
+          if (platform === 'x' || platform === 'instagram' || platform === 'facebook') {
             onAnalyze(clean);
           }
           return;
@@ -140,6 +143,7 @@ export const HeroInput: React.FC<HeroInputProps> = ({
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isLoading) return;
     clearPendingRedirect();
     setErrorNotice(null);
     onClearError?.();
@@ -154,7 +158,7 @@ export const HeroInput: React.FC<HeroInputProps> = ({
       return;
     }
 
-    const redirected = checkAndRouteUrl(trimmed, true);
+    const redirected = checkAndRouteUrl(trimmed);
     if (redirected) return;
 
     onAnalyze(normalizeUrlInput(trimmed));
@@ -188,13 +192,13 @@ export const HeroInput: React.FC<HeroInputProps> = ({
       }
     }
     if (currentLang === 'ar') {
-      return 'الصق رابط فيديو عام من X/تويتر...';
+      return 'الصق رابط فيديو عام من X أو Instagram أو Facebook...';
     } else if (currentLang === 'fr') {
-      return 'Collez un lien vidéo public X/Twitter...';
+      return 'Collez un lien vidéo public X, Instagram ou Facebook...';
     } else if (currentLang === 'es') {
-      return 'Pega un enlace público de video de X/Twitter...';
+      return 'Pega un enlace de video público de X, Instagram o Facebook...';
     }
-    return 'Paste a public X/Twitter video link...';
+    return 'Paste a public X, Instagram or Facebook video link...';
   };
 
   return (
@@ -205,7 +209,7 @@ export const HeroInput: React.FC<HeroInputProps> = ({
           <Sparkles className="w-3.5 h-3.5 text-[#1d9bf0]" />
           <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0f1419] dark:text-[#f7f9f9]">
             <span className="w-1.5 h-1.5 rounded-full bg-black dark:bg-white inline-block" />
-            <span>X / Twitter video</span>
+            <span>{isMp3Mode ? 'X / Twitter audio' : 'X / Twitter · Instagram · Facebook'}</span>
           </div>
         </div>
 
@@ -313,7 +317,7 @@ export const HeroInput: React.FC<HeroInputProps> = ({
                   setErrorNotice(null);
                   onClearError?.();
                   if (/^https?:\/\//i.test(val.trim())) {
-                    checkAndRouteUrl(val, false);
+                    checkAndRouteUrl(val);
                   } else {
                     clearPendingRedirect();
                   }

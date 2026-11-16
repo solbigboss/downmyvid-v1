@@ -323,7 +323,7 @@ async function callBackendXExtract(
         body: JSON.stringify({ url: cleanUrl }),
       },
       signal,
-      20000
+      50000
     );
     if (apiRes?.success && apiRes?.data) {
       const validated = validateExtractedMediaData(apiRes.data, cleanUrl);
@@ -989,119 +989,10 @@ async function extractMetaPlatformMedia(
   lang: Language,
   signal?: AbortSignal
 ): Promise<TweetMediaData> {
-  const platformDisplay = platform === 'instagram' ? 'Instagram' : platform === 'facebook' ? 'Facebook' : 'Threads';
-  const endpoint = platform === 'instagram' ? 'igdl' : platform === 'facebook' ? 'fbdown' : 'threads';
-
-  let backendErrorMsg: string | undefined;
-  let backendWasUnavailable = false;
-
-  // For Threads, our backend SSR/JSON extractor is authoritative (tioo frequently fails on Threads posts)
-  if (platform === 'threads') {
-    const { data, backendError, backendUnavailable } = await callBackendXExtract(cleanUrl, signal);
-    if (data) return data;
-    if (backendUnavailable) backendWasUnavailable = true;
-    if (backendError) throw new Error(backendError);
-  }
-
-  // Firebase Hosting is static-only. Do not call third-party browser endpoints
-  // for platforms whose extraction has not been verified on the live site.
-  if ((platform === 'instagram' || platform === 'facebook') && !getApiBaseUrl()) {
-    const { data, backendUnavailable, backendError } = await callBackendXExtract(cleanUrl, signal);
-    if (data) return data;
-    if (backendUnavailable) throw new Error(getBackendUnavailableError(lang));
-    if (backendError) throw new Error(backendError);
-  }
-
-  // For Instagram, the backend is authoritative: it now tries btch.igdl,
-  // then the ddinstagram / instagram embed HTML, then an authenticated
-  // session (IG_SESSIONID) when configured. tioo is only a last resort.
-  if (platform === 'instagram') {
-    const { data, backendError, backendUnavailable } = await callBackendXExtract(cleanUrl, signal);
-    if (data) return data;
-    if (backendUnavailable) backendWasUnavailable = true;
-    if (backendError) backendErrorMsg = backendError;
-  }
-
-  // Try btch browser endpoint (primary for FB, last resort for IG/Threads if backend unavailable)
-  try {
-    const raw = await fetchJsonWithTimeout(
-      `https://backend1.tioo.eu.org/${endpoint}?url=${encodeURIComponent(cleanUrl)}`,
-      {},
-      signal,
-      14000
-    );
-
-    const isExplicitError =
-      !raw ||
-      typeof raw === 'string' ||
-      raw.status === false ||
-      (typeof raw.status === 'number' && raw.status >= 400) ||
-      raw.type === 'error';
-
-    if (!isExplicitError) {
-      const { videos, thumbnails } = collectMediaUrlsFromUnknown(raw);
-      if (videos.length > 0) {
-        const formats: MediaFormat[] = videos.slice(0, 3).map((vUrl, idx) => ({
-          id: `${platform}_mp4_${idx}`,
-          label: idx === 0 ? 'HD Quality MP4' : `MP4 Stream ${idx + 1}`,
-          type: 'video',
-          quality: idx === 0 ? 'HD MP4' : 'SD MP4',
-          sizeMb: idx === 0 ? 14.5 : 7.5,
-          format: 'MP4',
-          isPopular: idx === 0,
-          directUrl: vUrl,
-        }));
-
-        return {
-          id: `${platform}_${Date.now()}`,
-          originalUrl: cleanUrl,
-          author: {
-            name: `${platformDisplay} Creator`,
-            handle: platform,
-            avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${platformDisplay}`,
-            verified: false,
-          },
-          tweetText: `${platformDisplay} Media`,
-          publishedAt: platformDisplay,
-          durationSeconds: 20,
-          viewCount: '—',
-          likeCount: '—',
-          retweetCount: '—',
-          thumbnailUrl: thumbnails[0] || '',
-          videoUrl: videos[0],
-          formats,
-        };
-      }
-    }
-  } catch (err: any) {
-    if (err?.name === 'AbortError' && signal?.aborted) throw err;
-  }
-
-  // Fallback to backend /api/extract for FB if not already called
-  // (Instagram and Threads already called the backend above.)
-  if (platform !== 'threads' && platform !== 'instagram') {
-    const { data, backendError, backendUnavailable } = await callBackendXExtract(cleanUrl, signal);
-    if (data) return data;
-    if (backendUnavailable) backendWasUnavailable = true;
-    if (backendError) backendErrorMsg = backendError;
-  }
-
-  if (backendWasUnavailable && !backendErrorMsg) {
-    throw new Error(getBackendUnavailableError(lang));
-  }
-
-  if (backendErrorMsg) {
-    throw new Error(backendErrorMsg);
-  }
-
-  const failReasons: Record<Language, string> = {
-    en: `Unable to extract real media from this ${platformDisplay} URL. The post may be private, login-protected, or blocked by ${platformDisplay}'s anti-scraping protection.`,
-    fr: `Impossible d'extraire une vidéo réelle depuis ce lien ${platformDisplay}. La publication est peut-être privée ou protégée.`,
-    es: `No se pudo extraer un video real de este enlace de ${platformDisplay}. La publicación puede ser privada o requerir inicio de sesión.`,
-    ar: `تعذر استخراج فيديو حقيقي من رابط ${platformDisplay}. قد يكون المنشور خاصاً أو يتطلب تسجيل الدخول أو محجوباً من المنصة.`,
-  };
-
-  throw new Error(failReasons[lang] || failReasons.en);
+  const { data, backendError } = await callBackendXExtract(cleanUrl, signal);
+  if (data) return data;
+  if (backendError) throw new Error(backendError);
+  throw new Error(getBackendUnavailableError(lang));
 }
 
 export async function extractMedia(

@@ -81,7 +81,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
         const contentType = (res.headers.get('content-type') || '').toLowerCase();
         if (!res.ok || !contentType.includes('application/json')) return false;
         const payload = await res.json();
-        return payload?.status === 'ok';
+        return payload?.status === 'ok' && payload?.capabilities?.mp3 !== false;
       })
       .then(setBackendAvailable)
       .catch(() => setBackendAvailable(false));

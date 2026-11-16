@@ -7,3 +7,6 @@ coverage/
 .env*
 !.env.example
 .firebase/
+.wrangler/
+.dev.vars*
+.npm-cache/
