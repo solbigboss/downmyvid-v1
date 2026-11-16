@@ -35,6 +35,9 @@ test('Instagram data-sjs returns the requested media with expected schema', asyn
   assert.equal(result.author.verified, false);
   assert.equal(result.tweetText, 'Caption');
   assert.equal(result.durationSeconds, 4.2);
+  assert.equal(result.likeCount, '10');
+  assert.equal(typeof result.viewCount, 'string');
+  assert.equal(result.retweetCount, '0');
   assert.equal(result.videoUrl, cdn);
   assert.equal(result.formats[0].quality, '720p');
   assert.equal(result.publishedAt, '2023-11-14T22:13:20.000Z');

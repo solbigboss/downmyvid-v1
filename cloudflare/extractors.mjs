@@ -273,9 +273,9 @@ function result(media, target, originalUrl, meta) {
     id: target.id, originalUrl,
     author: { name: text(owner.full_name || owner.name), handle: text(owner.username || owner.handle), avatar: image(owner.profile_pic_url || owner.profile_picture) || '', verified: false },
     tweetText: text(caption || media.edge_media_to_caption?.edges?.[0]?.node?.text || media.message?.text || media.title?.text || media.title || meta['og:description']),
-    publishedAt: timestamp(media.taken_at || media.taken_at_timestamp || media.publish_time || media.creation_time),
-    durationSeconds: numeric(duration), viewCount: numeric(media.video_view_count ?? media.play_count ?? media.video_play_count ?? media.view_count),
-    likeCount: numeric(media.like_count ?? media.edge_media_preview_like?.count ?? media.feedback?.reactors?.count), retweetCount: 0,
+    publishedAt: timestamp(media.taken_at || media.taken_at_timestamp || media.publish_time || media.creation_time) || '',
+    durationSeconds: numeric(duration), viewCount: String(numeric(media.video_view_count ?? media.play_count ?? media.video_play_count ?? media.view_count)),
+    likeCount: String(numeric(media.like_count ?? media.edge_media_preview_like?.count ?? media.feedback?.reactors?.count)), retweetCount: '0',
     thumbnailUrl, videoUrl: formats[0].directUrl, formats,
   };
 }
