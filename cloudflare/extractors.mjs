@@ -9,6 +9,7 @@ const SOURCE_HOSTS = new Set([
   'web.facebook.com', 'fb.watch', 'www.fb.watch',
 ]);
 const IG_HOSTS = new Set(['instagram.com', 'www.instagram.com', 'm.instagram.com']);
+const TWITTER_MEDIA_HOSTS = new Set(['video.twimg.com']);
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36';
 const SKIP_KEYS = /recommend|related|suggest|up_next|upnext|feed_units|sidecar|carousel/i;
@@ -30,7 +31,7 @@ export function safeMediaUrl(value) {
   const url = strictUrl(value);
   if (!url) return null;
   const host = url.hostname;
-  if (!['fbcdn.net', 'cdninstagram.com'].some(root => host === root || host.endsWith(`.${root}`))) return null;
+  if (!['fbcdn.net', 'cdninstagram.com'].some(root => host === root || host.endsWith(`.${root}`)) && !TWITTER_MEDIA_HOSTS.has(host)) return null;
   url.hash = '';
   return url.href;
 }

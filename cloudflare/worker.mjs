@@ -18,6 +18,18 @@ async function mediaLink(origin, path, target, secret, filename = '') {
 }
 async function proxy(request, env, url) {
   const target = url.searchParams.get('url');
+  const targetHost = (() => { try { return new URL(target).hostname; } catch { return ''; } })();
+  const isTwitterProxy = url.pathname === '/api/x-stream' && targetHost === 'video.twimg.com';
+  if (isTwitterProxy) {
+    const range = request.headers.get('Range');
+    if (range && !/^bytes=\d*-\d*$/.test(range)) return json({ error: 'Unsupported byte range.' }, 416);
+    const headers = range ? { Range: range } : {};
+    const upstream = await fetch(target, { method: request.method, redirect: 'manual', headers, signal: AbortSignal.timeout(20000) });
+    if (![200, 206].includes(upstream.status) || !/^video\//i.test(upstream.headers.get('Content-Type') || '')) return json({ error: 'X video stream unavailable.' }, 502);
+    const out = new Headers({ 'Content-Type': upstream.headers.get('Content-Type') || 'video/mp4', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+    for (const name of ['Content-Length', 'Content-Range', 'Accept-Ranges']) { const value = upstream.headers.get(name); if (value) out.set(name, value); }
+    return new Response(upstream.body, { status: upstream.status, headers: out });
+  }
   const exp = url.searchParams.get('exp') || '';
   const filename = url.searchParams.get('filename') || '';
   const supplied = url.searchParams.get('sig') || '';
@@ -56,7 +68,7 @@ async function route(request, env) {
   const url = new URL(request.url);
   if (url.pathname === '/api/health' && request.method === 'GET') return json({ status: 'ok', server: 'DownMyVid Cloudflare Worker', capabilities: { metaExtraction: true, mp3: false, hls: false } });
   if (!env.MEDIA_SIGNING_KEY || env.MEDIA_SIGNING_KEY.length < 32) return json({ error: 'Backend signing key is not configured.' }, 503);
-  if (['/api/stream-media', '/api/proxy-download'].includes(url.pathname) && ['GET', 'HEAD'].includes(request.method)) return proxy(request, env, url);
+  if (['/api/stream-media', '/api/proxy-download', '/api/x-stream'].includes(url.pathname) && ['GET', 'HEAD'].includes(request.method)) return proxy(request, env, url);
   if (url.pathname !== '/api/extract') return json({ error: 'This backend supports public Instagram/Facebook MP4 extraction only.' }, 404);
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405);
   const ip = request.headers.get('CF-Connecting-IP');

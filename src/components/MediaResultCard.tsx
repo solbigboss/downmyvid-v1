@@ -169,7 +169,8 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
       const attempt = previewStreamFallbackCountRef.current++;
       previewStreamFallbackTriedRef.current = true;
       if (attempt === 0 && backendAvailable) {
-        targetEl.src = resolveApiUrl(`/api/stream-media?url=${encodeURIComponent(rawStreamUrl)}`);
+        const proxyPath = /(?:^|\.)video\.twimg\.com$/i.test(new URL(rawStreamUrl).hostname) ? '/api/x-stream' : '/api/stream-media';
+        targetEl.src = resolveApiUrl(`${proxyPath}?url=${encodeURIComponent(rawStreamUrl)}`);
         targetEl.load();
         return;
       }

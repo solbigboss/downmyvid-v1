@@ -13,6 +13,20 @@ test('denies unknown origins and handles Firebase preflight', async () => {
   const r = await worker.fetch(new Request('https://worker.test/api/extract', { method: 'OPTIONS', headers: { Origin: 'https://downmyvid.com' } }), env);
   assert.equal(r.status, 204);
 });
+test('X stream proxy only allows video.twimg.com and forwards ranges', async () => {
+  const env = { MEDIA_SIGNING_KEY: 'x'.repeat(32), ALLOWED_ORIGINS: 'https://downmyvid.com' };
+  const oldFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    assert.equal(new URL(input).hostname, 'video.twimg.com');
+    assert.equal(init.headers.Range, 'bytes=0-1023');
+    return new Response('video', { status: 206, headers: { 'Content-Type': 'video/mp4', 'Content-Range': 'bytes 0-4/5' } });
+  };
+  try {
+    const response = await worker.fetch(new Request('https://worker.test/api/x-stream?url=' + encodeURIComponent('https://video.twimg.com/amplify_video/test.mp4?tag=29'), { headers: { Origin: 'https://downmyvid.com', Range: 'bytes=0-1023' } }), env);
+    assert.equal(response.status, 206); assert.equal(response.headers.get('Content-Type'), 'video/mp4');
+  } finally { globalThis.fetch = oldFetch; }
+});
+
 test('unsigned, arbitrary and expired media cannot become an open proxy', async () => {
   for (const query of ['url=https://example.com/video.mp4', 'url=https://scontent.fbcdn.net/a.mp4&exp=1&sig=fake', 'url=https://127.0.0.1/a.mp4']) {
     assert.equal((await worker.fetch(new Request(`https://worker.test/api/stream-media?${query}`), env)).status, 403);
