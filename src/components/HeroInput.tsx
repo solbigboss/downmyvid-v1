@@ -87,12 +87,20 @@ export const HeroInput: React.FC<HeroInputProps> = ({
 
     if (platform && platform !== 'x') {
       const labels: Record<'tiktok' | 'instagram' | 'facebook' | 'threads', string> = {
-        tiktok: 'TikTok extraction is not verified on the free static site.',
-        instagram: 'Instagram extraction is not verified on the free static site and requires a backend.',
-        facebook: 'Facebook extraction is not verified on the free static site and requires a backend.',
-        threads: 'Threads extraction is not verified on the free static site.',
+        tiktok: '⚡ TikTok detected! Switching to TikTok Downloader...',
+        instagram: '⚡ Instagram detected! Switching to Instagram Downloader...',
+        facebook: '⚡ Facebook detected! Switching to Facebook Downloader...',
+        threads: '⚡ Threads detected! Switching to Threads Downloader...',
       };
       setRedirectNotice(labels[platform]);
+      if (immediate) {
+        onPlatformDetected?.(platform, normalized);
+      } else {
+        redirectTimerRef.current = window.setTimeout(() => {
+          redirectTimerRef.current = null;
+          onPlatformDetected?.(platform, normalized);
+        }, 350);
+      }
       return true;
     }
 
@@ -188,13 +196,13 @@ export const HeroInput: React.FC<HeroInputProps> = ({
       }
     }
     if (currentLang === 'ar') {
-      return 'الصق رابط فيديو عام من X/تويتر...';
+      return 'الصق أي رابط (تيك توك، إنستغرام، إكس/تويتر، فيسبوك، ثريدز)...';
     } else if (currentLang === 'fr') {
-      return 'Collez un lien vidéo public X/Twitter...';
+      return 'Collez n’importe quel lien (TikTok, Instagram, X, Facebook, Threads)...';
     } else if (currentLang === 'es') {
-      return 'Pega un enlace público de video de X/Twitter...';
+      return 'Pega cualquier enlace (TikTok, Instagram, X, Facebook, Threads)...';
     }
-    return 'Paste a public X/Twitter video link...';
+    return 'Paste any link (TikTok, Instagram, X/Twitter, Facebook, Threads)...';
   };
 
   return (
@@ -205,11 +213,19 @@ export const HeroInput: React.FC<HeroInputProps> = ({
           <Sparkles className="w-3.5 h-3.5 text-[#1d9bf0]" />
           <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0f1419] dark:text-[#f7f9f9]">
             <span className="w-1.5 h-1.5 rounded-full bg-black dark:bg-white inline-block" />
-            <span>X / Twitter video</span>
+            <span>X</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00F2FE] inline-block" />
+            <span>TikTok</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#E1306C] inline-block" />
+            <span>Instagram</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#1877F2] inline-block" />
+            <span>Facebook</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#A855F7] inline-block" />
+            <span>Threads</span>
           </div>
         </div>
 
-        {/* X video downloader */}
+        {/* Hero Title: All-In-One Social Media Downloader */}
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-[#0f1419] dark:text-white tracking-tight leading-tight mb-3 max-w-3xl mx-auto">
           {isMp3Mode ? t.heroTitleMp3 : t.heroTitle}
         </h1>
@@ -219,9 +235,22 @@ export const HeroInput: React.FC<HeroInputProps> = ({
           {isMp3Mode ? t.heroSubtitleMp3 : t.heroSubtitle}
         </p>
 
-        {/* Platform filters */}
+        {/* Platform Quick Filter Pills */}
         {!isMp3Mode && (
           <div className="flex flex-wrap items-center justify-center gap-2 mb-5 max-w-2xl mx-auto">
+            <button
+              type="button"
+              onClick={() => setSelectedPlatform('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                selectedPlatform === 'all'
+                  ? 'bg-[#0f1419] dark:bg-white text-white dark:text-black shadow-sm'
+                  : 'bg-[#f0f2f5] dark:bg-[#1e2732] text-[#536471] dark:text-[#cfd9de] hover:text-[#0f1419] dark:hover:text-white border border-[#cfd9de]/60 dark:border-[#2f3336]'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>All In One</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setSelectedPlatform('x')}
@@ -235,11 +264,45 @@ export const HeroInput: React.FC<HeroInputProps> = ({
               <span>Twitter / X</span>
             </button>
 
+            <button
+              type="button"
+              onClick={() => onPlatformDetected?.('tiktok', '')}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-[#f0f2f5] dark:bg-[#1e2732] text-[#536471] dark:text-[#cfd9de] hover:text-[#00F2FE] border border-[#cfd9de]/60 dark:border-[#2f3336]"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#00F2FE]" />
+              <span>TikTok</span>
+            </button>
 
+            <button
+              type="button"
+              onClick={() => onPlatformDetected?.('instagram', '')}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-[#f0f2f5] dark:bg-[#1e2732] text-[#536471] dark:text-[#cfd9de] hover:text-[#E1306C] border border-[#cfd9de]/60 dark:border-[#2f3336]"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#E1306C]" />
+              <span>Instagram</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onPlatformDetected?.('facebook', '')}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-[#f0f2f5] dark:bg-[#1e2732] text-[#536471] dark:text-[#cfd9de] hover:text-[#1877F2] border border-[#cfd9de]/60 dark:border-[#2f3336]"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#1877F2]" />
+              <span>Facebook</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onPlatformDetected?.('threads', '')}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-[#f0f2f5] dark:bg-[#1e2732] text-[#536471] dark:text-[#cfd9de] hover:text-[#A855F7] border border-[#cfd9de]/60 dark:border-[#2f3336]"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#A855F7]" />
+              <span>Threads</span>
+            </button>
           </div>
         )}
 
-        {/* X media categories */}
+        {/* 3 Dedicated Download Slots for Twitter / X */}
         {!isMp3Mode && selectedPlatform === 'x' && (
           <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-5 max-w-xl mx-auto p-1.5 bg-[#eff3f4] dark:bg-[#1e2732] rounded-2xl border border-[#cfd9de]/80 dark:border-[#2f3336] shadow-xs animate-in fade-in duration-200">
             <button
@@ -385,9 +448,9 @@ export const HeroInput: React.FC<HeroInputProps> = ({
           )}
         </form>
 
-        {/* Example links */}
+        {/* 1-Click Quick Sample Links (Run Real Extraction Only) */}
         <div className="mt-6 pt-4 border-t border-[#eff3f4] dark:border-[#2f3336] flex flex-wrap items-center justify-center gap-2 text-xs text-[#536471] dark:text-[#8b98a5]">
-          <span className="font-semibold text-[#0f1419] dark:text-[#cfd9de]">Try an example link:</span>
+          <span className="font-semibold text-[#0f1419] dark:text-[#cfd9de]">{t.sampleLinksLabel}</span>
 
           <button
             type="button"
@@ -397,7 +460,36 @@ export const HeroInput: React.FC<HeroInputProps> = ({
             🚀 SpaceX (X Video)
           </button>
 
+          <button
+            type="button"
+            onClick={() => onPlatformDetected?.('tiktok', SAMPLE_URLS.tiktok)}
+            className="hover:text-[#00F2FE] hover:underline px-2.5 py-1 rounded-lg bg-[#f7f9f9] dark:bg-[#1e2732] border border-[#cfd9de]/60 dark:border-[#2f3336] transition-colors inline-flex items-center gap-1 dark:text-[#cfd9de]"
+          >
+            🎵 TikTok (No Watermark)
+          </button>
 
+          <button
+            type="button"
+            onClick={() => onPlatformDetected?.('instagram', SAMPLE_URLS.instagram)}
+            className="hover:text-[#E1306C] hover:underline px-2.5 py-1 rounded-lg bg-[#f7f9f9] dark:bg-[#1e2732] border border-[#cfd9de]/60 dark:border-[#2f3336] transition-colors inline-flex items-center gap-1 dark:text-[#cfd9de]"
+          >
+            📸 Instagram Reel (HD)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              clearPendingRedirect();
+              setErrorNotice(null);
+              onClearError?.();
+              setSelectedPlatform('x');
+              setXCategory('spaces');
+              inputRef.current?.focus();
+            }}
+            className="hover:text-[#7856FF] hover:underline px-2.5 py-1 rounded-lg bg-[#f7f9f9] dark:bg-[#1e2732] border border-[#cfd9de]/60 dark:border-[#2f3336] transition-colors inline-flex items-center gap-1 dark:text-[#cfd9de]"
+          >
+            🎙️ Spaces Audio (320k)
+          </button>
         </div>
       </div>
     </section>

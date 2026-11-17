@@ -58,10 +58,10 @@ export const Footer: React.FC<FooterProps> = ({
             </div>
           </div>
 
-          {/* X video tools */}
+          {/* Middle Column: Other Downloader Tools (Exact styling with colored dots matching image) */}
           <div className="md:col-span-4">
             <h4 className="text-xs font-bold text-[#0f1419] dark:text-white uppercase tracking-wider mb-3.5">
-              X / TWITTER
+              OTHER DOWNLOADER TOOLS
             </h4>
             <ul className="space-y-2.5 text-xs">
               <li>
@@ -74,6 +74,55 @@ export const Footer: React.FC<FooterProps> = ({
                 </button>
               </li>
 
+              <li>
+                <button
+                  onClick={() => onSelectTab('mp3')}
+                  className="flex items-center gap-2.5 text-[#536471] dark:text-[#cfd9de] hover:text-[#1d9bf0] dark:hover:text-[#1d9bf0] transition-colors group text-left rtl:text-right"
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#10b981] shrink-0 group-hover:scale-125 transition-transform" />
+                  <span className="font-medium group-hover:underline">Twitter to MP3 Converter</span>
+                </button>
+              </li>
+
+              <li>
+                <button
+                  onClick={() => onSelectTab('instagram')}
+                  className="flex items-center gap-2.5 text-[#536471] dark:text-[#cfd9de] hover:text-[#E1306C] dark:hover:text-[#E1306C] transition-colors group text-left rtl:text-right"
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#E1306C] shrink-0 group-hover:scale-125 transition-transform" />
+                  <span className="font-medium group-hover:underline">Instagram Downloader</span>
+                </button>
+              </li>
+
+              <li>
+                <button
+                  onClick={() => onSelectTab('tiktok')}
+                  className="flex items-center gap-2.5 text-[#536471] dark:text-[#cfd9de] hover:text-[#00F2FE] dark:hover:text-[#00F2FE] transition-colors group text-left rtl:text-right"
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#00F2FE] shrink-0 group-hover:scale-125 transition-transform" />
+                  <span className="font-medium group-hover:underline">TikTok Video Downloader</span>
+                </button>
+              </li>
+
+              <li>
+                <button
+                  onClick={() => onSelectTab('facebook')}
+                  className="flex items-center gap-2.5 text-[#536471] dark:text-[#cfd9de] hover:text-[#1877F2] dark:hover:text-[#1877F2] transition-colors group text-left rtl:text-right"
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#1877F2] shrink-0 group-hover:scale-125 transition-transform" />
+                  <span className="font-medium group-hover:underline">Facebook Downloader</span>
+                </button>
+              </li>
+
+              <li>
+                <button
+                  onClick={() => onSelectTab('threads')}
+                  className="flex items-center gap-2.5 text-[#536471] dark:text-[#cfd9de] hover:text-[#A855F7] dark:hover:text-[#A855F7] transition-colors group text-left rtl:text-right"
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#A855F7] shrink-0 group-hover:scale-125 transition-transform" />
+                  <span className="font-medium group-hover:underline">Threads Downloader</span>
+                </button>
+              </li>
             </ul>
           </div>
 
