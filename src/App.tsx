@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -65,7 +65,16 @@ export default function App() {
   // Compute resolved dark mode boolean based on selection and system preference
   const isDark = themeMode === 'system' ? systemIsDark : themeMode === 'dark';
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('home');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+    const routeTabs: Record<string, ActiveTab> = {
+      '/instagram-video-downloader': 'instagram',
+      '/facebook-video-downloader': 'facebook',
+      '/x-video-downloader': 'home',
+      '/guides': 'guides',
+    };
+    return routeTabs[path] || 'home';
+  });
   const [analyzedMedia, setAnalyzedMedia] = useState<TweetMediaData | null>(null);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -94,6 +103,43 @@ export default function App() {
   const history = localHistory;
 
   const [platformRoute, setPlatformRoute] = useState<{ url: string; nonce: number } | null>(null);
+
+  useEffect(() => {
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+    const titles: Record<string, { title: string; description: string }> = {
+      '/instagram-video-downloader': {
+        title: 'Instagram Video Downloader | DownMyVid',
+        description: 'Download public Instagram Reels and video posts as MP4 files. No sign-up required.',
+      },
+      '/facebook-video-downloader': {
+        title: 'Facebook Video Downloader | DownMyVid',
+        description: 'Download public Facebook videos and Reels as MP4 files. No sign-up required.',
+      },
+      '/x-video-downloader': {
+        title: 'X Video Downloader | DownMyVid',
+        description: 'Download public X/Twitter videos in the formats offered by the source.',
+      },
+    };
+    const metadata = titles[path] || {
+      title: 'DownMyVid | Download Public Social Videos',
+      description: 'Download public videos from X, Instagram, and Facebook as MP4 files. Free and no sign-up required.',
+    };
+    document.title = metadata.title;
+    let description = document.querySelector('meta[name="description"]');
+    if (!description) {
+      description = document.createElement('meta');
+      description.setAttribute('name', 'description');
+      document.head.appendChild(description);
+    }
+    description.setAttribute('content', metadata.description);
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute('href', `https://downmyvid.com${path || '/'}`);
+  }, []);
 
   const cancelInFlight = useCallback(() => {
     abortControllerRef.current?.abort();
