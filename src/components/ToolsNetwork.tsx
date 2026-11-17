@@ -13,18 +13,46 @@ export const ToolsNetwork: React.FC<ToolsNetworkProps> = ({ currentLang, onSelec
 
   const tools = [
     {
-      title: 'X / Twitter video downloads',
-      desc: 'Available public video formats depend on the source.',
+      title: 'Instagram Downloader',
+      desc: 'Reels, Stories, and Video Carousels in HD',
       icon: Film,
-      tab: 'home' as ActiveTab,
-      color: 'text-[#1d9bf0]',
+      tab: 'instagram' as ActiveTab,
+      color: 'text-[#E1306C]',
     },
     {
-      title: 'MP3 conversion',
-      desc: 'Requires the Express backend and ffmpeg.',
+      title: 'TikTok Video Downloader',
+      desc: 'Watermark-free HD MP4 and sound extractor',
+      icon: Tv,
+      tab: 'tiktok' as ActiveTab,
+      color: 'text-[#00F2FE]',
+    },
+    {
+      title: 'Facebook Downloader',
+      desc: 'Watch videos and Reels in 1080p Full HD',
+      icon: Film,
+      tab: 'facebook' as ActiveTab,
+      color: 'text-[#1877F2]',
+    },
+    {
+      title: 'Threads Downloader',
+      desc: 'Clean MP4 videos & media from Threads posts',
+      icon: Smartphone,
+      tab: 'threads' as ActiveTab,
+      color: 'text-[#A855F7]',
+    },
+    {
+      title: 'Twitter to MP3 (320kbps)',
+      desc: 'Lossless stereo music & speech extractor',
       icon: Music,
-      tab: 'home' as ActiveTab,
+      tab: 'mp3' as ActiveTab,
       color: 'text-[#ffad1f]',
+    },
+    {
+      title: 'Twitter Spaces Audio Grabber',
+      desc: 'Full podcast broadcasts & conversations',
+      icon: Radio,
+      tab: 'mp3' as ActiveTab,
+      color: 'text-[#00ba7c]',
     },
   ];
 
@@ -33,7 +61,7 @@ export const ToolsNetwork: React.FC<ToolsNetworkProps> = ({ currentLang, onSelec
       <div className="max-w-6xl mx-auto">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <h2 className="text-2xl sm:text-3xl font-black text-[#0f1419] dark:text-white tracking-tight mb-2">
-            {currentLang === 'ar' ? 'أدوات الوسائط' : 'Other media tools'}
+            {currentLang === 'ar' ? 'شبكة الأدوات المتخصصة والمستخرجات' : 'Specialized Media Extractors & Tools'}
           </h2>
           <p className="text-sm text-[#536471] dark:text-[#8b98a5]">
             {currentLang === 'ar'
