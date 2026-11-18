@@ -212,6 +212,18 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
                 {activeTab === 'home' && <span className="w-2 h-2 rounded-full bg-[#1d9bf0]" />}
               </button>
 
+              <button
+                onClick={() => handleSelectTab('blog')}
+                className={`w-full text-left rtl:text-right px-3.5 py-3 rounded-xl text-sm font-bold flex items-center justify-between transition-all ${
+                  activeTab === 'blog' ? 'bg-[#1d9bf0]/15 text-[#1d9bf0] dark:text-[#71c9f8]' : 'text-[#0f1419] dark:text-[#cfd9de] hover:bg-[#eff3f4] dark:hover:bg-[#1e2732]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#eff3f4] dark:bg-[#1e2732] text-[#536471] dark:text-[#8b98a5]">✦</div>
+                  <div><div>Blog</div><div className="text-[10px] text-[#536471] dark:text-[#8b98a5] font-normal">AI, gaming & internet news</div></div>
+                </div>
+              </button>
+
               {/* Row 3: Saved Downloads */}
               <button
                 onClick={() => handleSelectTab('history')}

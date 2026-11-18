@@ -7,3 +7,6 @@ coverage/
 .env*
 !.env.example
 .firebase/
+cloudflare/.npm-cache/
+cloudflare/.wrangler/
+cloudflare/.dev.vars*
