@@ -38,6 +38,7 @@ function toPost(id: string, data: Record<string, unknown>): BlogPost {
     excerpt: String(data.excerpt || ''),
     body: String(data.body || ''),
     imageUrl: String(data.imageUrl || ''),
+    category: String(data.category || 'News'),
     authorEmail: String(data.authorEmail || ''),
     published: data.published === true,
     publishedAt: dateString(data.publishedAt),
@@ -71,6 +72,7 @@ export async function savePost(input: Omit<BlogPost, 'id' | 'authorEmail' | 'pub
   const excerpt = input.excerpt.trim();
   const body = input.body.trim();
   const imageUrl = input.imageUrl.trim();
+  const category = input.category.trim().slice(0, 40) || 'News';
   if (!slug || !title || !excerpt || !body) throw new Error('Title, slug, excerpt, and article text are required.');
   const duplicateCheck = await getDocs(query(postsCollection, where('slug', '==', slug)));
   if (duplicateCheck.docs.some(snapshot => snapshot.id !== input.id)) throw new Error('That URL slug is already in use. Choose another slug.');
@@ -83,9 +85,9 @@ export async function savePost(input: Omit<BlogPost, 'id' | 'authorEmail' | 'pub
     const previousData = previous.data();
     const wasPublished = previousData.published === true;
     const publishedAt = input.published ? (wasPublished ? dateString(previousData.publishedAt) || now : now) : '';
-    await updateDoc(postRef, { slug, title, excerpt, body, imageUrl, published: input.published, authorEmail: user.email, publishedAt, updatedAt: serverTimestamp() });
+    await updateDoc(postRef, { slug, title, excerpt, body, imageUrl, category, published: input.published, authorEmail: user.email, publishedAt, updatedAt: serverTimestamp() });
   } else {
-    await addDoc(postsCollection, { slug, title, excerpt, body, imageUrl, published: input.published, authorEmail: user.email, publishedAt: input.published ? now : '', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    await addDoc(postsCollection, { slug, title, excerpt, body, imageUrl, category, published: input.published, authorEmail: user.email, publishedAt: input.published ? now : '', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   }
 }
 

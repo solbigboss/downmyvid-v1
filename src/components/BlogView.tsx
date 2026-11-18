@@ -55,10 +55,17 @@ export const BlogView: React.FC<BlogViewProps> = ({ slug, onBack, onOpenPost }) 
 
   return <section className="max-w-5xl mx-auto px-4 py-10">
     <div className="max-w-2xl mb-10"><p className="text-sm font-bold text-[#1d9bf0]">DownMyVid Blog</p><h1 className="mt-2 text-4xl sm:text-5xl font-black tracking-tight">AI, gaming, creator tools, and internet news</h1><p className="mt-4 text-[#536471] dark:text-[#8b98a5]">Practical guides and news for people who create, watch, and save media online.</p></div>
-    {posts.length === 0 ? <div className="rounded-3xl border border-dashed border-[#cfd9de] p-10 text-center text-[#536471]"><ImageIcon className="w-8 h-8 mx-auto mb-3" /><p>New posts are coming soon.</p></div> : <div className="grid gap-5 sm:grid-cols-2">
-      {posts.map(item => <button key={item.id} onClick={() => onOpenPost(item.slug)} className="text-left rounded-3xl overflow-hidden border border-[#cfd9de] dark:border-[#2f3336] bg-white dark:bg-[#15202b] hover:border-[#1d9bf0] transition-colors">
-        {item.imageUrl ? <img src={item.imageUrl} alt="" className="w-full h-48 object-cover" /> : <div className="h-48 bg-[#e8f5fe] dark:bg-[#1e2732] flex items-center justify-center"><ImageIcon className="w-10 h-10 text-[#1d9bf0]" /></div>}
-        <div className="p-5"><p className="text-xs text-[#536471]">{dateLabel(item.publishedAt)}</p><h2 className="mt-2 text-xl font-black">{item.title}</h2><p className="mt-2 text-sm text-[#536471] dark:text-[#8b98a5]">{item.excerpt}</p></div>
+    {posts.length === 0 ? <div className="rounded-3xl border border-dashed border-[#cfd9de] p-10 text-center text-[#536471]"><ImageIcon className="w-8 h-8 mx-auto mb-3" /><p>New posts are coming soon.</p></div> : <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {posts.map(item => <button key={item.id} onClick={() => onOpenPost(item.slug)} className="flex min-h-[360px] flex-col rounded-3xl overflow-hidden border border-[#cfd9de] dark:border-[#2f3336] bg-white dark:bg-[#15202b] hover:border-[#1d9bf0] transition-colors text-center">
+        <div className="flex h-44 w-full shrink-0 items-center justify-center overflow-hidden bg-[#f7f9f9] dark:bg-[#1e2732]">
+          {item.imageUrl ? <img src={item.imageUrl} alt="" className="h-full w-full object-cover object-center" /> : <ImageIcon className="w-10 h-10 text-[#1d9bf0]" />}
+        </div>
+        <div className="flex flex-1 flex-col items-center p-4 text-center">
+          <p className="text-xs text-[#536471]">{dateLabel(item.publishedAt)}</p>
+          <h2 className="mt-2 line-clamp-3 text-lg font-black">{item.title}</h2>
+          <p className="mt-2 line-clamp-3 text-sm text-[#536471] dark:text-[#8b98a5]">{item.excerpt}</p>
+          <p className="mt-auto w-full pt-4 text-right text-xs font-semibold text-[#1d9bf0]">Blog / {item.category || 'News'}</p>
+        </div>
       </button>)}
     </div>}
   </section>;

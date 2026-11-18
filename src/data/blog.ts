@@ -5,6 +5,7 @@ export interface BlogPost {
   excerpt: string;
   body: string;
   imageUrl: string;
+  category: string;
   authorEmail: string;
   published: boolean;
   publishedAt: string;

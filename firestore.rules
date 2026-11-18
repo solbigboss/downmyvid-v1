@@ -32,6 +32,7 @@ service cloud.firestore {
         && request.resource.data.excerpt is string && request.resource.data.excerpt.size() <= 300
         && request.resource.data.body is string && request.resource.data.body.size() <= 100000
         && request.resource.data.imageUrl is string && request.resource.data.imageUrl.size() <= 2048
+        && request.resource.data.category is string && request.resource.data.category.size() > 0 && request.resource.data.category.size() <= 40
         && request.resource.data.published is bool;
       allow update: if isBlogAdmin()
         && request.resource.data.authorEmail == 'journeysailblog@gmail.com'
@@ -40,6 +41,7 @@ service cloud.firestore {
         && request.resource.data.excerpt is string && request.resource.data.excerpt.size() <= 300
         && request.resource.data.body is string && request.resource.data.body.size() <= 100000
         && request.resource.data.imageUrl is string && request.resource.data.imageUrl.size() <= 2048
+        && request.resource.data.category is string && request.resource.data.category.size() > 0 && request.resource.data.category.size() <= 40
         && request.resource.data.published is bool;
       allow delete: if isBlogAdmin();
     }

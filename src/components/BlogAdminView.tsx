@@ -6,7 +6,7 @@ import { BlogPost, BLOG_ADMIN_EMAIL } from '../data/blog';
 import { listAdminPosts, removePost, savePost, uploadBlogImage } from '../services/blogService';
 import { MarkdownContent } from './MarkdownContent';
 
-const blank = { slug: '', title: '', excerpt: '', body: '', imageUrl: '', published: false };
+const blank = { slug: '', title: '', excerpt: '', body: '', imageUrl: '', category: 'News', published: false };
 
 function makeSlug(value: string) {
   return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 90);
@@ -51,7 +51,7 @@ export const BlogAdminView: React.FC = () => {
 
   const edit = (post: BlogPost) => {
     setEditingId(post.id);
-    setForm({ slug: post.slug, title: post.title, excerpt: post.excerpt, body: post.body, imageUrl: post.imageUrl, published: post.published });
+    setForm({ slug: post.slug, title: post.title, excerpt: post.excerpt, body: post.body, imageUrl: post.imageUrl, category: post.category || 'News', published: post.published });
     setMessage(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -87,6 +87,7 @@ export const BlogAdminView: React.FC = () => {
         <div className="flex items-center justify-between"><h2 className="text-xl font-black">{editingId ? 'Edit post' : 'New post'}</h2><button type="button" onClick={reset} className="inline-flex items-center gap-1 text-sm font-bold text-[#1d9bf0]"><Plus className="w-4 h-4" /> New</button></div>
         <label className="block text-sm font-bold">Title<input required value={form.title} onChange={e => setForm({ ...form, title: e.target.value, slug: editingId ? form.slug : makeSlug(e.target.value) })} className="mt-1 w-full rounded-xl border bg-transparent px-3 py-2.5" maxLength={140} /></label>
         <label className="block text-sm font-bold">URL slug<input required value={form.slug} onChange={e => setForm({ ...form, slug: makeSlug(e.target.value) })} className="mt-1 w-full rounded-xl border bg-transparent px-3 py-2.5" maxLength={90} /></label>
+        <label className="block text-sm font-bold">Category<input required value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="Games, News, Finance" className="mt-1 w-full rounded-xl border bg-transparent px-3 py-2.5" maxLength={40} /></label>
         <label className="block text-sm font-bold">Short excerpt<textarea required value={form.excerpt} onChange={e => setForm({ ...form, excerpt: e.target.value })} className="mt-1 w-full rounded-xl border bg-transparent px-3 py-2.5" rows={3} maxLength={300} /></label>
         <div>
           <label htmlFor="blog-article-body" className="block text-sm font-bold">Article text</label>
