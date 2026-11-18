@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Calendar, Image as ImageIcon, LoaderCircle } from 'lucide-react';
 import { BlogPost } from '../data/blog';
 import { getPublishedPost, listPublishedPosts } from '../services/blogService';
+import { MarkdownContent } from './MarkdownContent';
 
 interface BlogViewProps { slug?: string; onBack: () => void; onOpenPost: (slug: string) => void; }
 
@@ -47,7 +48,7 @@ export const BlogView: React.FC<BlogViewProps> = ({ slug, onBack, onOpenPost }) 
         {post.imageUrl && <img src={post.imageUrl} alt="" className="mt-7 w-full max-h-[420px] object-cover rounded-3xl" />}
         <h1 className="mt-7 text-3xl sm:text-5xl font-black tracking-tight">{post.title}</h1>
         <p className="mt-3 text-sm text-[#536471] flex items-center gap-2"><Calendar className="w-4 h-4" /> {dateLabel(post.publishedAt)}</p>
-        <div className="mt-8 whitespace-pre-wrap text-base leading-8 text-[#536471] dark:text-[#cfd9de]">{post.body}</div>
+        <MarkdownContent value={post.body} className="mt-8 text-base text-[#536471] dark:text-[#cfd9de]" />
       </> : <p className="mt-10 text-[#536471]">This post was not found.</p>}
     </article>;
   }
