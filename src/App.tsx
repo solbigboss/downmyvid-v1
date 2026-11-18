@@ -19,6 +19,33 @@ import { Footer } from './components/Footer';
 import { Language, ActiveTab, TweetMediaData, MediaFormat, DownloadHistoryItem, ThemeMode } from './types';
 import { extractMedia } from './services/mediaExtractor';
 
+const TAB_PATHS: Record<ActiveTab, string> = {
+  home: '/',
+  mp3: '/mp3',
+  batch: '/batch',
+  guides: '/guides',
+  faq: '/faq',
+  history: '/history',
+  instagram: '/instagram-video-downloader',
+  facebook: '/facebook-video-downloader',
+  tiktok: '/tiktok-downloader',
+  threads: '/threads-downloader',
+};
+
+function tabFromPath(pathname: string): ActiveTab {
+  const path = pathname.replace(/\/+$/, '').toLowerCase() || '/';
+  const routeTabs: Record<string, ActiveTab> = Object.fromEntries(
+    Object.entries(TAB_PATHS).map(([tab, route]) => [route, tab as ActiveTab]),
+  );
+  // Accept the short legacy platform routes as aliases while writing canonical paths.
+  routeTabs['/x-video-downloader'] = 'home';
+  routeTabs['/instagram'] = 'instagram';
+  routeTabs['/facebook'] = 'facebook';
+  routeTabs['/tiktok'] = 'tiktok';
+  routeTabs['/threads'] = 'threads';
+  return routeTabs[path] || 'home';
+}
+
 export default function App() {
   const [currentLang, setCurrentLang] = useState<Language>(() => {
     const saved = localStorage.getItem('viralx_lang');
@@ -65,15 +92,12 @@ export default function App() {
   // Compute resolved dark mode boolean based on selection and system preference
   const isDark = themeMode === 'system' ? systemIsDark : themeMode === 'dark';
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
-    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
-    const routeTabs: Record<string, ActiveTab> = {
-      '/instagram-video-downloader': 'instagram',
-      '/facebook-video-downloader': 'facebook',
-      '/x-video-downloader': 'home',
-      '/guides': 'guides',
-    };
-    return routeTabs[path] || 'home';
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => tabFromPath(window.location.pathname));
+  const [addressBarUrl] = useState(() => {
+    const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    const blocked = new Set(['guides', 'history', 'instagram', 'tiktok', 'facebook', 'threads', 'mp3', 'batch', 'faq', 'x-video-downloader', 'instagram-video-downloader', 'facebook-video-downloader', 'tiktok-downloader', 'threads-downloader']);
+    const match = path.match(/^([^/]+)\/status\/(\d+)$/i);
+    return match && !blocked.has(match[1].toLowerCase()) ? `https://x.com/${match[1]}/status/${match[2]}` : '';
   });
   const [analyzedMedia, setAnalyzedMedia] = useState<TweetMediaData | null>(null);
   const [extractError, setExtractError] = useState<string | null>(null);
@@ -103,6 +127,17 @@ export default function App() {
   const history = localHistory;
 
   const [platformRoute, setPlatformRoute] = useState<{ url: string; nonce: number } | null>(null);
+  const activeTabRef = useRef(activeTab);
+
+  const navigateToTab = useCallback((tab: ActiveTab, replace = false) => {
+    const path = TAB_PATHS[tab];
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (currentPath !== path) {
+      window.history[replace ? 'replaceState' : 'pushState']({ tab }, '', path);
+    }
+    activeTabRef.current = tab;
+    setActiveTab(tab);
+  }, []);
 
   useEffect(() => {
     const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
@@ -120,7 +155,15 @@ export default function App() {
         description: 'Download public X/Twitter videos in the formats offered by the source.',
       },
     };
-    const metadata = titles[path] || {
+    const tabMetadata: Partial<Record<ActiveTab, { title: string; description: string }>> = {
+      home: {
+        title: 'X Video Downloader | DownMyVid',
+        description: 'Download public X/Twitter videos in the formats offered by the source.',
+      },
+      instagram: titles['/instagram-video-downloader'],
+      facebook: titles['/facebook-video-downloader'],
+    };
+    const metadata = titles[path] || tabMetadata[activeTab] || {
       title: 'DownMyVid | Download Public Social Videos',
       description: 'Download public videos from X, Instagram, and Facebook as MP4 files. Free and no sign-up required.',
     };
@@ -139,7 +182,7 @@ export default function App() {
       document.head.appendChild(canonical);
     }
     canonical.setAttribute('href', `https://downmyvid.com${path || '/'}`);
-  }, []);
+  }, [activeTab]);
 
   const cancelInFlight = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -155,13 +198,30 @@ export default function App() {
     setPlatformRoute(null);
   }, [cancelInFlight]);
 
+  useEffect(() => {
+    if (!addressBarUrl) return;
+    navigateToTab('home', true);
+    window.setTimeout(() => handleAnalyze(addressBarUrl), 0);
+  }, [addressBarUrl]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      resetExtractionState();
+      const tab = tabFromPath(window.location.pathname);
+      activeTabRef.current = tab;
+      setActiveTab(tab);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [resetExtractionState]);
+
   const handlePlatformDetected = (platform: 'tiktok' | 'instagram' | 'facebook' | 'threads', detectedUrl: string) => {
     cancelInFlight();
     setAnalyzedMedia(null);
     setExtractError(null);
     const clean = detectedUrl.trim();
     setPlatformRoute(clean ? { url: clean, nonce: ++routeNonceRef.current } : null);
-    setActiveTab(platform);
+    navigateToTab(platform);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -282,7 +342,7 @@ export default function App() {
 
   const handleSelectTool = (tab: ActiveTab) => {
     resetExtractionState();
-    setActiveTab(tab);
+    navigateToTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -303,7 +363,7 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={(tab) => {
           resetExtractionState();
-          setActiveTab(tab);
+          navigateToTab(tab);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         savedCount={history.length}
@@ -319,7 +379,7 @@ export default function App() {
             currentLang={currentLang}
             onBackToHome={() => {
               resetExtractionState();
-              setActiveTab('home');
+              navigateToTab('home');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
@@ -329,7 +389,7 @@ export default function App() {
             onClearHistory={handleClearHistory}
             onSelectUrl={(url) => {
               setPlatformRoute(null);
-              setActiveTab('home');
+              navigateToTab('home');
               handleAnalyze(url);
             }}
             currentLang={currentLang}
@@ -342,7 +402,7 @@ export default function App() {
             onSaveDownload={handleSaveDownload}
             onSelectPlatform={(slug) => {
               resetExtractionState();
-              setActiveTab(slug);
+              navigateToTab(slug);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             initialRoute={platformRoute}
@@ -397,7 +457,7 @@ export default function App() {
         onLanguageChange={setCurrentLang}
         onSelectTab={(tab) => {
           resetExtractionState();
-          setActiveTab(tab);
+          navigateToTab(tab);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
