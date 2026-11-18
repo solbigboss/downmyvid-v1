@@ -22,15 +22,20 @@ function inlineParts(value: string): ReactNode[] {
   return parts;
 }
 
-export const MarkdownContent: React.FC<{ value: string; className?: string }> = ({ value, className = '' }) => {
+type Alignment = 'left' | 'center' | 'right';
+
+export const MarkdownContent: React.FC<{ value: string; className?: string; dir?: 'ltr' | 'rtl' }> = ({ value, className = '', dir }) => {
   const lines = value.replace(/\r\n?/g, '\n').split('\n');
   const output: ReactNode[] = [];
+  const alignmentStack: Alignment[] = [];
+  let alignment: Alignment = dir === 'rtl' ? 'right' : 'left';
+  const alignmentClass: Record<Alignment, string> = { left: 'text-left', center: 'text-center', right: 'text-right' };
   let paragraph: string[] = [];
   let list: string[] = [];
 
   const flushParagraph = () => {
     if (!paragraph.length) return;
-    output.push(<p key={`p-${output.length}`} className="mb-5">{inlineParts(paragraph.join(' '))}</p>);
+    output.push(<p key={`p-${output.length}`} className={`mb-5 ${alignmentClass[alignment]}`}>{inlineParts(paragraph.join(' '))}</p>);
     paragraph = [];
   };
   const flushList = () => {
@@ -41,12 +46,15 @@ export const MarkdownContent: React.FC<{ value: string; className?: string }> = 
 
   lines.forEach((line, index) => {
     const trimmed = line.trim();
+    const alignStart = /^\[align:(left|center|right)\]$/i.exec(trimmed);
+    if (alignStart) { flushParagraph(); flushList(); alignmentStack.push(alignment); alignment = alignStart[1].toLowerCase() as typeof alignment; return; }
+    if (trimmed === '[/align]') { flushParagraph(); flushList(); alignment = alignmentStack.pop() || 'right'; return; }
     if (!trimmed) { flushParagraph(); flushList(); return; }
     const heading = /^(#{1,2})\s+(.+)$/.exec(trimmed);
     if (heading) {
       flushParagraph(); flushList();
       const Tag = heading[1].length === 1 ? 'h2' : 'h3';
-      output.push(<Tag key={`h-${index}`} className={`${Tag === 'h2' ? 'text-2xl sm:text-3xl' : 'text-xl sm:text-2xl'} font-black tracking-tight mb-4 mt-8`}>{inlineParts(heading[2])}</Tag>);
+      output.push(<Tag key={`h-${index}`} className={`${Tag === 'h2' ? 'text-2xl sm:text-3xl' : 'text-xl sm:text-2xl'} ${alignmentClass[alignment]} font-black tracking-tight mb-4 mt-8`}>{inlineParts(heading[2])}</Tag>);
       return;
     }
     const bullet = /^[-*]\s+(.+)$/.exec(trimmed);
@@ -55,5 +63,5 @@ export const MarkdownContent: React.FC<{ value: string; className?: string }> = 
   });
   flushParagraph(); flushList();
 
-  return <div className={`leading-8 ${className}`}>{output.map((node, index) => <Fragment key={index}>{node}</Fragment>)}</div>;
+  return <div dir={dir} className={`leading-8 ${className}`}>{output.map((node, index) => <Fragment key={index}>{node}</Fragment>)}</div>;
 };

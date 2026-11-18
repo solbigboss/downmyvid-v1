@@ -3,8 +3,12 @@ import { ArrowLeft, Calendar, Image as ImageIcon, LoaderCircle } from 'lucide-re
 import { BlogPost } from '../data/blog';
 import { getPublishedPost, listPublishedPosts } from '../services/blogService';
 import { MarkdownContent } from './MarkdownContent';
+import { Language } from '../types';
+import { blogCopy } from '../data/blogCopy';
 
-interface BlogViewProps { slug?: string; onBack: () => void; onOpenPost: (slug: string) => void; }
+interface BlogViewProps { slug?: string; currentLang: Language; onBack: () => void; onOpenPost: (slug: string) => void; }
+
+const rtl = (language: Language) => language === 'ar';
 
 function dateLabel(value: string) {
   if (!value) return '';
@@ -12,7 +16,8 @@ function dateLabel(value: string) {
   return Number.isFinite(date.getTime()) ? date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '';
 }
 
-export const BlogView: React.FC<BlogViewProps> = ({ slug, onBack, onOpenPost }) => {
+export const BlogView: React.FC<BlogViewProps> = ({ slug, currentLang, onBack, onOpenPost }) => {
+  const copy = blogCopy[currentLang];
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,24 +43,24 @@ export const BlogView: React.FC<BlogViewProps> = ({ slug, onBack, onOpenPost }) 
     if (socialImage && post.imageUrl) socialImage.setAttribute('content', post.imageUrl);
   }, [slug, post]);
 
-  if (loading) return <section className="max-w-5xl mx-auto px-4 py-20 text-center"><LoaderCircle className="w-8 h-8 animate-spin mx-auto text-[#1d9bf0]" /></section>;
-  if (error) return <section className="max-w-3xl mx-auto px-4 py-20 text-center"><p className="text-red-600">{error}</p><button onClick={onBack} className="mt-5 text-[#1d9bf0] font-bold">Back to DownMyVid</button></section>;
+  if (loading) return <section dir={rtl(currentLang) ? 'rtl' : 'ltr'} className="max-w-5xl mx-auto px-4 py-20 text-center"><LoaderCircle className="w-8 h-8 animate-spin mx-auto text-[#1d9bf0]" /></section>;
+  if (error) return <section dir={rtl(currentLang) ? 'rtl' : 'ltr'} className="max-w-3xl mx-auto px-4 py-20 text-center"><p className="text-red-600">{error}</p><button onClick={onBack} className="mt-5 text-[#1d9bf0] font-bold">{copy.back}</button></section>;
 
   if (slug) {
-    return <article className="max-w-3xl mx-auto px-4 py-10">
-      <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-bold text-[#536471] hover:text-[#1d9bf0]"><ArrowLeft className="w-4 h-4" /> Blog</button>
+    return <article dir={rtl(currentLang) ? 'rtl' : 'ltr'} className="max-w-3xl mx-auto px-4 py-10 text-start">
+      <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-bold text-[#536471] hover:text-[#1d9bf0]"><ArrowLeft className="w-4 h-4" /> {copy.back}</button>
       {post ? <>
         {post.imageUrl && <img src={post.imageUrl} alt="" className="mt-7 w-full max-h-[420px] object-cover rounded-3xl" />}
         <h1 className="mt-7 text-3xl sm:text-5xl font-black tracking-tight">{post.title}</h1>
         <p className="mt-3 text-sm text-[#536471] flex items-center gap-2"><Calendar className="w-4 h-4" /> {dateLabel(post.publishedAt)}</p>
-        <MarkdownContent value={post.body} className="mt-8 text-base text-[#536471] dark:text-[#cfd9de]" />
+        <MarkdownContent value={post.body} dir={rtl(currentLang) ? 'rtl' : 'ltr'} className="mt-8 text-base text-[#536471] dark:text-[#cfd9de]" />
       </> : <p className="mt-10 text-[#536471]">This post was not found.</p>}
     </article>;
   }
 
-  return <section className="max-w-6xl mx-auto px-4 py-10">
-    <div className="mx-auto mb-10 max-w-3xl text-center"><h1 className="mt-2 text-4xl sm:text-5xl font-black tracking-tight">AI, gaming, creator tools, and internet news</h1><p className="mt-4 text-[#536471] dark:text-[#8b98a5]">Practical guides and news for people who create, watch, and save media online.</p></div>
-    {posts.length === 0 ? <div className="rounded-3xl border border-dashed border-[#cfd9de] p-10 text-center text-[#536471]"><ImageIcon className="w-8 h-8 mx-auto mb-3" /><p>New posts are coming soon.</p></div> : <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+  return <section dir={rtl(currentLang) ? 'rtl' : 'ltr'} className="max-w-6xl mx-auto px-4 py-10">
+    <div className="mx-auto mb-10 max-w-3xl text-center"><h1 className="mt-2 text-4xl sm:text-5xl font-black tracking-tight">{copy.title}</h1><p className="mt-4 text-[#536471] dark:text-[#8b98a5]">{copy.subtitle}</p></div>
+    {posts.length === 0 ? <div className="rounded-3xl border border-dashed border-[#cfd9de] p-10 text-center text-[#536471]"><ImageIcon className="w-8 h-8 mx-auto mb-3" /><p>{copy.newPosts}</p></div> : <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
       {posts.map(item => <button key={item.id} onClick={() => onOpenPost(item.slug)} className="flex min-h-[360px] flex-col rounded-3xl overflow-hidden border border-[#cfd9de] dark:border-[#2f3336] bg-white dark:bg-[#15202b] hover:border-[#1d9bf0] transition-colors text-center">
         <div className="flex h-44 w-full shrink-0 items-center justify-center overflow-hidden bg-[#f7f9f9] dark:bg-[#1e2732]">
           {item.imageUrl ? <img src={item.imageUrl} alt="" className="h-full w-full object-cover object-center" /> : <ImageIcon className="w-10 h-10 text-[#1d9bf0]" />}

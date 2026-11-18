@@ -414,11 +414,12 @@ export default function App() {
         {activeTab === 'blog' ? (
           <BlogView
             slug={blogSlug}
+            currentLang={currentLang}
             onBack={() => navigateToPath('/blog')}
             onOpenPost={(slug) => navigateToPath(`/blog/${encodeURIComponent(slug)}`)}
           />
         ) : activeTab === 'admin' ? (
-          <BlogAdminView />
+          <BlogAdminView currentLang={currentLang} />
         ) : activeTab === 'guides' ? (
           <GuidesView
             currentLang={currentLang}
