@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bold, Heading1, Heading2, ImagePlus, Italic, Link as LinkIcon, List, LoaderCircle, LogIn, LogOut, Plus, Save, Trash2 } from 'lucide-react';
+import { Bold, Heading1, Heading2, ImagePlus, Italic, Link as LinkIcon, List, LoaderCircle, LogIn, LogOut, Plus, Redo2, Save, Trash2, Undo2 } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, loginWithGoogle, logoutUser } from '../firebase';
 import { BlogPost, BLOG_ADMIN_EMAIL } from '../data/blog';
@@ -17,12 +17,36 @@ export const BlogAdminView: React.FC = () => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [editingId, setEditingId] = useState<string | undefined>();
   const [form, setForm] = useState(blank);
+  const [undoStack, setUndoStack] = useState<string[]>([]);
+  const [redoStack, setRedoStack] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => onAuthStateChanged(auth, setUser), []);
+
+  const updateBody = (nextBody: string) => {
+    setUndoStack(stack => [...stack.slice(-99), form.body]);
+    setRedoStack([]);
+    setForm(current => ({ ...current, body: nextBody }));
+  };
+
+  const undoBody = () => {
+    if (!undoStack.length) return;
+    const previous = undoStack[undoStack.length - 1];
+    setUndoStack(stack => stack.slice(0, -1));
+    setRedoStack(stack => [...stack, form.body]);
+    setForm(current => ({ ...current, body: previous }));
+  };
+
+  const redoBody = () => {
+    if (!redoStack.length) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack(stack => stack.slice(0, -1));
+    setUndoStack(stack => [...stack, form.body]);
+    setForm(current => ({ ...current, body: next }));
+  };
 
   const insertMarkdown = (prefix: string, suffix = '', placeholder = 'text') => {
     const textarea = bodyRef.current;
@@ -31,12 +55,26 @@ export const BlogAdminView: React.FC = () => {
     const end = textarea.selectionEnd;
     const selected = form.body.slice(start, end) || placeholder;
     const nextBody = `${form.body.slice(0, start)}${prefix}${selected}${suffix}${form.body.slice(end)}`;
-    setForm(current => ({ ...current, body: nextBody }));
+    updateBody(nextBody);
     window.requestAnimationFrame(() => {
       textarea.focus();
       const cursor = start + prefix.length + selected.length + suffix.length;
       textarea.setSelectionRange(cursor, cursor);
     });
+  };
+
+  const insertImageMarkdown = () => {
+    const rawUrl = window.prompt('Paste a direct image URL (https://…)');
+    if (!rawUrl) return;
+    try {
+      const imageUrl = new URL(rawUrl.trim());
+      if (imageUrl.protocol !== 'https:') throw new Error('Use an HTTPS image URL.');
+      const textarea = bodyRef.current;
+      const cursor = textarea?.selectionStart ?? form.body.length;
+      updateBody(`${form.body.slice(0, cursor)}![Image description](${imageUrl.href})\n${form.body.slice(cursor)}`);
+    } catch {
+      setMessage('Please enter a valid HTTPS image URL.');
+    }
   };
   const isAdmin = user?.email?.toLowerCase() === BLOG_ADMIN_EMAIL;
 
@@ -52,10 +90,12 @@ export const BlogAdminView: React.FC = () => {
   const edit = (post: BlogPost) => {
     setEditingId(post.id);
     setForm({ slug: post.slug, title: post.title, excerpt: post.excerpt, body: post.body, imageUrl: post.imageUrl, category: post.category || 'News', published: post.published });
+    setUndoStack([]);
+    setRedoStack([]);
     setMessage(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  const reset = () => { setEditingId(undefined); setForm(blank); setMessage(null); if (fileRef.current) fileRef.current.value = ''; };
+  const reset = () => { setEditingId(undefined); setForm(blank); setUndoStack([]); setRedoStack([]); setMessage(null); if (fileRef.current) fileRef.current.value = ''; };
   const onSave = async (event: React.FormEvent) => {
     event.preventDefault(); setLoading(true); setMessage(null);
     try { await savePost({ ...form, id: editingId }); await refresh(); reset(); setMessage('Post saved.'); }
@@ -92,14 +132,18 @@ export const BlogAdminView: React.FC = () => {
         <div>
           <label htmlFor="blog-article-body" className="block text-sm font-bold">Article text</label>
           <div className="mt-2 flex flex-wrap gap-1 rounded-t-xl border border-b-0 border-[#cfd9de] dark:border-[#2f3336] bg-[#f7f9f9] dark:bg-[#1e2732] p-2" role="toolbar" aria-label="Article formatting">
+            <button type="button" title="Undo" aria-label="Undo" disabled={!undoStack.length} onClick={undoBody} className="rounded-lg border p-2 hover:bg-white dark:hover:bg-[#15202b] disabled:cursor-not-allowed disabled:opacity-40"><Undo2 className="h-4 w-4" /></button>
+            <button type="button" title="Redo" aria-label="Redo" disabled={!redoStack.length} onClick={redoBody} className="rounded-lg border p-2 hover:bg-white dark:hover:bg-[#15202b] disabled:cursor-not-allowed disabled:opacity-40"><Redo2 className="h-4 w-4" /></button>
+            <span className="mx-1 h-6 w-px bg-[#cfd9de]" aria-hidden="true" />
             <button type="button" title="Heading 1" aria-label="Insert heading 1" onClick={() => insertMarkdown('# ', '', 'Main heading')} className="rounded-lg border p-2 hover:bg-white dark:hover:bg-[#15202b]"><Heading1 className="h-4 w-4" /></button>
             <button type="button" title="Heading 2" aria-label="Insert heading 2" onClick={() => insertMarkdown('## ', '', 'Section heading')} className="rounded-lg border p-2 hover:bg-white dark:hover:bg-[#15202b]"><Heading2 className="h-4 w-4" /></button>
             <button type="button" title="Bold" aria-label="Bold selected text" onClick={() => insertMarkdown('**', '**', 'bold text')} className="rounded-lg border p-2 hover:bg-white dark:hover:bg-[#15202b]"><Bold className="h-4 w-4" /></button>
             <button type="button" title="Italic" aria-label="Italicize selected text" onClick={() => insertMarkdown('*', '*', 'italic text')} className="rounded-lg border p-2 hover:bg-white dark:hover:bg-[#15202b]"><Italic className="h-4 w-4" /></button>
             <button type="button" title="Link" aria-label="Insert link" onClick={() => insertMarkdown('[', '](https://example.com)', 'link text')} className="rounded-lg border p-2 hover:bg-white dark:hover:bg-[#15202b]"><LinkIcon className="h-4 w-4" /></button>
             <button type="button" title="Bullet list" aria-label="Insert bullet item" onClick={() => insertMarkdown('- ', '', 'List item')} className="rounded-lg border p-2 hover:bg-white dark:hover:bg-[#15202b]"><List className="h-4 w-4" /></button>
+            <button type="button" title="Insert image URL" aria-label="Insert image URL" onClick={insertImageMarkdown} className="rounded-lg border p-2 hover:bg-white dark:hover:bg-[#15202b]"><ImagePlus className="h-4 w-4" /></button>
           </div>
-          <textarea id="blog-article-body" ref={bodyRef} required value={form.body} onChange={e => setForm({ ...form, body: e.target.value })} className="w-full rounded-b-xl border border-[#cfd9de] dark:border-[#2f3336] bg-transparent px-3 py-3 font-mono text-sm leading-6" rows={14} aria-describedby="blog-markdown-help" />
+          <textarea id="blog-article-body" ref={bodyRef} required value={form.body} onChange={e => updateBody(e.target.value)} className="w-full rounded-b-xl border border-[#cfd9de] dark:border-[#2f3336] bg-transparent px-3 py-3 font-mono text-sm leading-6" rows={14} aria-describedby="blog-markdown-help" />
           <p id="blog-markdown-help" className="mt-1 text-xs text-[#536471]">Use # Heading 1, ## Heading 2, **bold**, *italic*, [link text](https://…), and - bullets. Raw HTML is treated as text.</p>
           <details className="mt-3 rounded-xl border border-[#cfd9de] dark:border-[#2f3336] p-3">
             <summary className="cursor-pointer text-sm font-bold">Preview article formatting</summary>

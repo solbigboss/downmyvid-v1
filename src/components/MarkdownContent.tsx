@@ -2,17 +2,19 @@ import React, { Fragment, ReactNode } from 'react';
 
 function inlineParts(value: string): ReactNode[] {
   const parts: ReactNode[] = [];
-  const pattern = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+  const pattern = /(!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(value))) {
     if (match.index > lastIndex) parts.push(value.slice(lastIndex, match.index));
-    if (match[2] && match[3]) {
-      parts.push(<a key={`link-${match.index}`} href={match[3]} target="_blank" rel="noopener noreferrer" className="text-[#1d9bf0] underline underline-offset-2">{match[2]}</a>);
-    } else if (match[4]) {
-      parts.push(<strong key={`bold-${match.index}`}>{match[4]}</strong>);
-    } else if (match[5]) {
-      parts.push(<em key={`italic-${match.index}`}>{match[5]}</em>);
+    if (match[2] !== undefined && match[3]) {
+      parts.push(<img key={`image-${match.index}`} src={match[3]} alt={match[2]} loading="lazy" referrerPolicy="no-referrer" className="my-6 mx-auto max-h-[560px] max-w-full rounded-2xl object-contain" />);
+    } else if (match[4] && match[5]) {
+      parts.push(<a key={`link-${match.index}`} href={match[5]} target="_blank" rel="noopener noreferrer" className="text-[#1d9bf0] underline underline-offset-2">{match[4]}</a>);
+    } else if (match[6]) {
+      parts.push(<strong key={`bold-${match.index}`}>{match[6]}</strong>);
+    } else if (match[7]) {
+      parts.push(<em key={`italic-${match.index}`}>{match[7]}</em>);
     }
     lastIndex = match.index + match[0].length;
   }
