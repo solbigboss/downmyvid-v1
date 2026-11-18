@@ -53,8 +53,8 @@ export const BlogView: React.FC<BlogViewProps> = ({ slug, onBack, onOpenPost }) 
     </article>;
   }
 
-  return <section className="max-w-5xl mx-auto px-4 py-10">
-    <div className="max-w-2xl mb-10"><p className="text-sm font-bold text-[#1d9bf0]">DownMyVid Blog</p><h1 className="mt-2 text-4xl sm:text-5xl font-black tracking-tight">AI, gaming, creator tools, and internet news</h1><p className="mt-4 text-[#536471] dark:text-[#8b98a5]">Practical guides and news for people who create, watch, and save media online.</p></div>
+  return <section className="max-w-6xl mx-auto px-4 py-10">
+    <div className="mx-auto mb-10 max-w-3xl text-center"><h1 className="mt-2 text-4xl sm:text-5xl font-black tracking-tight">AI, gaming, creator tools, and internet news</h1><p className="mt-4 text-[#536471] dark:text-[#8b98a5]">Practical guides and news for people who create, watch, and save media online.</p></div>
     {posts.length === 0 ? <div className="rounded-3xl border border-dashed border-[#cfd9de] p-10 text-center text-[#536471]"><ImageIcon className="w-8 h-8 mx-auto mb-3" /><p>New posts are coming soon.</p></div> : <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
       {posts.map(item => <button key={item.id} onClick={() => onOpenPost(item.slug)} className="flex min-h-[360px] flex-col rounded-3xl overflow-hidden border border-[#cfd9de] dark:border-[#2f3336] bg-white dark:bg-[#15202b] hover:border-[#1d9bf0] transition-colors text-center">
         <div className="flex h-44 w-full shrink-0 items-center justify-center overflow-hidden bg-[#f7f9f9] dark:bg-[#1e2732]">
