@@ -19,6 +19,31 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isBlogAdmin() {
+      return request.auth != null && request.auth.token.email == 'journeysailblog@gmail.com';
+    }
+
+    match /blogPosts/{postId} {
+      allow read: if resource.data.published == true || isBlogAdmin();
+      allow create: if isBlogAdmin()
+        && request.resource.data.authorEmail == 'journeysailblog@gmail.com'
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 140
+        && request.resource.data.slug is string && request.resource.data.slug.matches('^[a-z0-9]+(-[a-z0-9]+)*$')
+        && request.resource.data.excerpt is string && request.resource.data.excerpt.size() <= 300
+        && request.resource.data.body is string && request.resource.data.body.size() <= 100000
+        && request.resource.data.imageUrl is string && request.resource.data.imageUrl.size() <= 2048
+        && request.resource.data.published is bool;
+      allow update: if isBlogAdmin()
+        && request.resource.data.authorEmail == 'journeysailblog@gmail.com'
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 140
+        && request.resource.data.slug is string && request.resource.data.slug.matches('^[a-z0-9]+(-[a-z0-9]+)*$')
+        && request.resource.data.excerpt is string && request.resource.data.excerpt.size() <= 300
+        && request.resource.data.body is string && request.resource.data.body.size() <= 100000
+        && request.resource.data.imageUrl is string && request.resource.data.imageUrl.size() <= 2048
+        && request.resource.data.published is bool;
+      allow delete: if isBlogAdmin();
+    }
+
     // User profile document
     match /users/{userId} {
       allow get: if isOwner(userId);

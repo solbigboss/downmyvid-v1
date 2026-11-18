@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isBlogAdmin() {
+      return request.auth != null && request.auth.token.email == 'journeysailblog@gmail.com';
+    }
+
+    match /blog-images/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isBlogAdmin()
+        && request.auth.uid == userId
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

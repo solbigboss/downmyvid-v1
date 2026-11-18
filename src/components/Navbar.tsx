@@ -96,6 +96,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               {t.navHowToUse}
             </button>
             <button
+              onClick={() => onTabChange('blog')}
+              className={`transition-colors hover:text-[#0f1419] dark:hover:text-white py-1 ${
+                activeTab === 'blog' ? 'text-[#1d9bf0] dark:text-[#1d9bf0] border-b-2 border-[#1d9bf0]' : ''
+              }`}
+            >
+              Blog
+            </button>
+            <button
               onClick={() => onTabChange('history')}
               className={`transition-colors hover:text-[#0f1419] dark:hover:text-white py-1 flex items-center gap-1.5 ${
                 activeTab === 'history' ? 'text-[#1d9bf0] dark:text-[#1d9bf0] border-b-2 border-[#1d9bf0]' : ''

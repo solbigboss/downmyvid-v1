@@ -16,6 +16,8 @@ import { GuidesView } from './components/GuidesView';
 import { PlatformDownloaderView } from './components/PlatformDownloaderView';
 import { QrCodeModal } from './components/QrCodeModal';
 import { Footer } from './components/Footer';
+import { BlogView } from './components/BlogView';
+import { BlogAdminView } from './components/BlogAdminView';
 import { Language, ActiveTab, TweetMediaData, MediaFormat, DownloadHistoryItem, ThemeMode } from './types';
 import { extractMedia } from './services/mediaExtractor';
 
@@ -30,10 +32,19 @@ const TAB_PATHS: Record<ActiveTab, string> = {
   facebook: '/facebook-video-downloader',
   tiktok: '/tiktok-downloader',
   threads: '/threads-downloader',
+  blog: '/blog',
+  admin: '/admin',
 };
+
+function blogSlugFromPath(pathname: string): string | undefined {
+  const match = pathname.match(/^\/blog\/([^/]+)\/?$/i);
+  if (!match) return undefined;
+  try { return decodeURIComponent(match[1]); } catch { return undefined; }
+}
 
 function tabFromPath(pathname: string): ActiveTab {
   const path = pathname.replace(/\/+$/, '').toLowerCase() || '/';
+  if (path === '/blog' || path.startsWith('/blog/')) return 'blog';
   const routeTabs: Record<string, ActiveTab> = Object.fromEntries(
     Object.entries(TAB_PATHS).map(([tab, route]) => [route, tab as ActiveTab]),
   );
@@ -93,9 +104,10 @@ export default function App() {
   const isDark = themeMode === 'system' ? systemIsDark : themeMode === 'dark';
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => tabFromPath(window.location.pathname));
+  const [blogSlug, setBlogSlug] = useState<string | undefined>(() => blogSlugFromPath(window.location.pathname));
   const [addressBarUrl] = useState(() => {
     const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
-    const blocked = new Set(['guides', 'history', 'instagram', 'tiktok', 'facebook', 'threads', 'mp3', 'batch', 'faq', 'x-video-downloader', 'instagram-video-downloader', 'facebook-video-downloader', 'tiktok-downloader', 'threads-downloader']);
+    const blocked = new Set(['guides', 'history', 'instagram', 'tiktok', 'facebook', 'threads', 'mp3', 'batch', 'faq', 'blog', 'admin', 'x-video-downloader', 'instagram-video-downloader', 'facebook-video-downloader', 'tiktok-downloader', 'threads-downloader']);
     const match = path.match(/^([^/]+)\/status\/(\d+)$/i);
     return match && !blocked.has(match[1].toLowerCase()) ? `https://x.com/${match[1]}/status/${match[2]}` : '';
   });
@@ -129,6 +141,14 @@ export default function App() {
   const [platformRoute, setPlatformRoute] = useState<{ url: string; nonce: number } | null>(null);
   const activeTabRef = useRef(activeTab);
 
+  const navigateToPath = useCallback((path: string, replace = false) => {
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (currentPath !== path) window.history[replace ? 'replaceState' : 'pushState']({}, '', path);
+    activeTabRef.current = 'blog';
+    setActiveTab('blog');
+    setBlogSlug(blogSlugFromPath(path));
+  }, []);
+
   const navigateToTab = useCallback((tab: ActiveTab, replace = false) => {
     const path = TAB_PATHS[tab];
     const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -137,6 +157,7 @@ export default function App() {
     }
     activeTabRef.current = tab;
     setActiveTab(tab);
+    setBlogSlug(undefined);
   }, []);
 
   useEffect(() => {
@@ -150,6 +171,11 @@ export default function App() {
         title: 'Facebook Video Downloader | DownMyVid',
         description: 'Download public Facebook videos and Reels as MP4 files. No sign-up required.',
       },
+      '/blog': {
+        title: 'DownMyVid Blog | AI, Gaming & Internet News',
+        description: 'News, explainers, and practical guides about AI, gaming, creator tools, and the internet.',
+      },
+      '/admin': { title: 'Blog Admin | DownMyVid', description: 'Private DownMyVid blog publishing dashboard.' },
       '/x-video-downloader': {
         title: 'X Video Downloader | DownMyVid',
         description: 'Download public X/Twitter videos in the formats offered by the source.',
@@ -163,10 +189,13 @@ export default function App() {
       instagram: titles['/instagram-video-downloader'],
       facebook: titles['/facebook-video-downloader'],
     };
-    const metadata = titles[path] || tabMetadata[activeTab] || {
-      title: 'DownMyVid | Download Public Social Videos',
-      description: 'Download public videos from X, Instagram, and Facebook as MP4 files. Free and no sign-up required.',
-    };
+    const blogSlug = blogSlugFromPath(window.location.pathname);
+    const metadata = blogSlug
+      ? { title: 'Blog Article | DownMyVid', description: 'News, guides, and stories from the DownMyVid blog.' }
+      : titles[path] || tabMetadata[activeTab] || {
+        title: 'DownMyVid | Download Public Social Videos',
+        description: 'Download public videos from X, Instagram, and Facebook as MP4 files. Free and no sign-up required.',
+      };
     document.title = metadata.title;
     let description = document.querySelector('meta[name="description"]');
     if (!description) {
@@ -182,7 +211,14 @@ export default function App() {
       document.head.appendChild(canonical);
     }
     canonical.setAttribute('href', `https://downmyvid.com${path || '/'}`);
-  }, [activeTab]);
+    let robots = document.querySelector('meta[name="robots"]');
+    if (!robots) {
+      robots = document.createElement('meta');
+      robots.setAttribute('name', 'robots');
+      document.head.appendChild(robots);
+    }
+    robots.setAttribute('content', activeTab === 'admin' || window.location.pathname.startsWith('/admin') ? 'noindex,nofollow' : 'index,follow');
+  }, [activeTab, blogSlug]);
 
   const cancelInFlight = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -210,6 +246,7 @@ export default function App() {
       const tab = tabFromPath(window.location.pathname);
       activeTabRef.current = tab;
       setActiveTab(tab);
+      setBlogSlug(blogSlugFromPath(window.location.pathname));
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -374,7 +411,15 @@ export default function App() {
 
       {/* Main Content Area based on Active Tab */}
       <main className="flex-1">
-        {activeTab === 'guides' ? (
+        {activeTab === 'blog' ? (
+          <BlogView
+            slug={blogSlug}
+            onBack={() => navigateToPath('/blog')}
+            onOpenPost={(slug) => navigateToPath(`/blog/${encodeURIComponent(slug)}`)}
+          />
+        ) : activeTab === 'admin' ? (
+          <BlogAdminView />
+        ) : activeTab === 'guides' ? (
           <GuidesView
             currentLang={currentLang}
             onBackToHome={() => {
