@@ -171,6 +171,22 @@ export default function App() {
         title: 'Facebook Video Downloader | DownMyVid',
         description: 'Download public Facebook videos and Reels as MP4 files. No sign-up required.',
       },
+      '/tiktok-downloader': {
+        title: 'TikTok Video Downloader | DownMyVid',
+        description: 'Download public TikTok videos as MP4 files. No sign-up required.',
+      },
+      '/threads-downloader': {
+        title: 'Threads Video Downloader | DownMyVid',
+        description: 'Download public Threads videos as MP4 files. No sign-up required.',
+      },
+      '/guides': {
+        title: 'Guides | DownMyVid',
+        description: 'Step-by-step guides to download public videos from X, Instagram, Facebook, TikTok and Threads.',
+      },
+      '/faq': {
+        title: 'FAQ | DownMyVid',
+        description: 'Answers to common questions about downloading public videos with DownMyVid.',
+      },
       '/blog': {
         title: 'DownMyVid Blog | AI, Gaming & Internet News',
         description: 'News, explainers, and practical guides about AI, gaming, creator tools, and the internet.',
@@ -188,6 +204,10 @@ export default function App() {
       },
       instagram: titles['/instagram-video-downloader'],
       facebook: titles['/facebook-video-downloader'],
+      tiktok: titles['/tiktok-downloader'],
+      threads: titles['/threads-downloader'],
+      guides: titles['/guides'],
+      faq: titles['/faq'],
     };
     const blogSlug = blogSlugFromPath(window.location.pathname);
     const metadata = blogSlug
@@ -211,6 +231,12 @@ export default function App() {
       document.head.appendChild(canonical);
     }
     canonical.setAttribute('href', `https://downmyvid.com${path || '/'}`);
+    const canonicalUrl = `https://downmyvid.com${path || '/'}`;
+    document.querySelector('meta[property="og:url"]')?.setAttribute('content', canonicalUrl);
+    document.querySelector('meta[property="og:title"]')?.setAttribute('content', metadata.title);
+    document.querySelector('meta[property="og:description"]')?.setAttribute('content', metadata.description);
+    document.querySelector('meta[name="twitter:title"]')?.setAttribute('content', metadata.title);
+    document.querySelector('meta[name="twitter:description"]')?.setAttribute('content', metadata.description);
     let robots = document.querySelector('meta[name="robots"]');
     if (!robots) {
       robots = document.createElement('meta');
