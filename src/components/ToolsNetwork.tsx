@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Radio, Tv, Music, Film, Droplets, Smartphone } from 'lucide-react';
+import { ArrowRight, Radio, Tv, Music, Film, Droplets, Smartphone, Youtube } from 'lucide-react';
 import { Language, ActiveTab } from '../types';
 import { translations } from '../data/translations';
 
@@ -12,6 +12,13 @@ export const ToolsNetwork: React.FC<ToolsNetworkProps> = ({ currentLang, onSelec
   const t = translations[currentLang];
 
   const tools = [
+    {
+      title: 'YouTube Downloader',
+      desc: '1080p Full HD Videos, Shorts & 320kbps MP3',
+      icon: Youtube,
+      tab: 'youtube' as ActiveTab,
+      color: 'text-[#FF0000]',
+    },
     {
       title: 'Instagram Downloader',
       desc: 'Reels, Stories, and Video Carousels in HD',

@@ -2,11 +2,11 @@ export type Language = 'en' | 'fr' | 'es' | 'ar';
 
 export type ThemeMode = 'system' | 'dark' | 'light';
 
-export type PlatformType = 'x' | 'instagram' | 'tiktok' | 'facebook' | 'threads';
+export type PlatformType = 'x' | 'instagram' | 'tiktok' | 'facebook' | 'threads' | 'youtube';
 
 export type XDownloadCategory = 'video' | 'stream' | 'spaces';
 
-export type ActiveTab = 'home' | 'mp3' | 'batch' | 'guides' | 'faq' | 'history' | 'instagram' | 'tiktok' | 'facebook' | 'threads' | 'blog' | 'admin';
+export type ActiveTab = 'home' | 'mp3' | 'batch' | 'guides' | 'faq' | 'history' | 'instagram' | 'tiktok' | 'facebook' | 'threads' | 'youtube' | 'blog' | 'admin';
 
 export interface MediaFormat {
   id: string;

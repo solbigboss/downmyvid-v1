@@ -86,6 +86,16 @@ export const Footer: React.FC<FooterProps> = ({
 
               <li>
                 <button
+                  onClick={() => onSelectTab('youtube')}
+                  className="flex items-center gap-2.5 text-[#536471] dark:text-[#cfd9de] hover:text-[#FF0000] dark:hover:text-[#FF0000] transition-colors group text-left rtl:text-right"
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#FF0000] shrink-0 group-hover:scale-125 transition-transform" />
+                  <span className="font-medium group-hover:underline">YouTube Downloader</span>
+                </button>
+              </li>
+
+              <li>
+                <button
                   onClick={() => onSelectTab('instagram')}
                   className="flex items-center gap-2.5 text-[#536471] dark:text-[#cfd9de] hover:text-[#E1306C] dark:hover:text-[#E1306C] transition-colors group text-left rtl:text-right"
                 >

@@ -32,6 +32,7 @@ const TAB_PATHS: Record<ActiveTab, string> = {
   facebook: '/facebook-video-downloader',
   tiktok: '/tiktok-downloader',
   threads: '/threads-downloader',
+  youtube: '/youtube-video-downloader',
   blog: '/blog',
   admin: '/admin',
 };
@@ -54,6 +55,7 @@ function tabFromPath(pathname: string): ActiveTab {
   routeTabs['/facebook'] = 'facebook';
   routeTabs['/tiktok'] = 'tiktok';
   routeTabs['/threads'] = 'threads';
+  routeTabs['/youtube'] = 'youtube';
   return routeTabs[path] || 'home';
 }
 
@@ -440,7 +442,7 @@ export default function App() {
             }}
             currentLang={currentLang}
           />
-        ) : activeTab === 'instagram' || activeTab === 'tiktok' || activeTab === 'facebook' || activeTab === 'threads' ? (
+        ) : activeTab === 'instagram' || activeTab === 'tiktok' || activeTab === 'facebook' || activeTab === 'threads' || activeTab === 'youtube' ? (
           <PlatformDownloaderView
             platformSlug={activeTab}
             currentLang={currentLang}

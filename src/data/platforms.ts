@@ -1,7 +1,7 @@
 import { Language } from '../types';
 
 export interface PlatformConfig {
-  slug: 'instagram' | 'tiktok' | 'facebook' | 'threads';
+  slug: 'instagram' | 'tiktok' | 'facebook' | 'threads' | 'youtube';
   name: string;
   badge: Record<Language, string>;
   title: Record<Language, string>;
@@ -22,7 +22,7 @@ export interface PlatformConfig {
   features: Record<Language, string[]>;
 }
 
-export const PLATFORMS_CONFIG: Record<'instagram' | 'tiktok' | 'facebook' | 'threads', PlatformConfig> = {
+export const PLATFORMS_CONFIG: Record<'instagram' | 'tiktok' | 'facebook' | 'threads' | 'youtube', PlatformConfig> = {
   facebook: {
     slug: 'facebook',
     name: 'Facebook',
@@ -208,6 +208,53 @@ export const PLATFORMS_CONFIG: Record<'instagram' | 'tiktok' | 'facebook' | 'thr
       fr: ['Conserve la clarté vidéo 1080p', 'Extraction directe depuis le CDN Threads', 'Extraction de notes vocales en MP3', 'Rapide et sécurisé sans journaux'],
       es: ['Conserva la claridad nativa en 1080p', 'Extracción directa del CDN de Threads', 'Extracción de notas de voz a MP3', 'Rápido y seguro sin registros'],
       ar: ['حفظ الفيديو بالدقة الكاملة 1080p الأصلية', 'استخراج مباشر من خوادم ثريدز السريعة', 'استخراج التسجيلات الصوتية بصيغة MP3', 'أمان وخصوصية تامة بدون حفظ سجلات'],
+    },
+  },
+
+  youtube: {
+    slug: 'youtube',
+    name: 'YouTube',
+    badge: {
+      en: 'YouTube Video, Shorts & MP3 Downloader',
+      fr: 'Téléchargeur de Vidéos, Shorts & MP3 YouTube',
+      es: 'Descargador de Videos, Shorts y MP3 de YouTube',
+      ar: 'محمل فيديوهات، شورتس وصوت MP3 من يوتيوب',
+    },
+    title: {
+      en: 'YouTube Video & Shorts Downloader (HD MP4 / MP3)',
+      fr: 'Téléchargeur de Vidéos YouTube & Shorts (HD MP4 / MP3)',
+      es: 'Descargador de Videos y Shorts de YouTube (HD MP4 / MP3)',
+      ar: 'تحميل فيديو يوتيوب وشورتس بجودة عالية (YouTube HD Downloader)',
+    },
+    subtitle: {
+      en: 'Download YouTube videos, Shorts, and clips in 1080p Full HD, 720p HD MP4 or extract clean 320kbps MP3 audio instantly.',
+      fr: 'Téléchargez des vidéos YouTube, Shorts et clips en 1080p Full HD, 720p HD MP4 ou extrayez un son MP3 320kbps propre instantanément.',
+      es: 'Descarga videos de YouTube, Shorts y clips en 1080p Full HD, 720p HD MP4 o extrae audio MP3 limpio a 320kbps al instante.',
+      ar: 'قم بتنزيل مقاطع فيديو يوتيوب ومقاطع Shorts بجودة 1080p Full HD و 720p HD MP4 أو استخرج الصوت بصيغة MP3 نقية 320kbps مباشرة وبدون برامج.',
+    },
+    placeholder: {
+      en: 'Paste YouTube link (e.g. https://www.youtube.com/watch?v=... or https://youtu.be/...)',
+      fr: 'Collez le lien YouTube (ex. https://www.youtube.com/watch?v=... ou https://youtu.be/...)',
+      es: 'Pega el enlace de YouTube (ej. https://www.youtube.com/watch?v=... o https://youtu.be/...)',
+      ar: 'الصق رابط يوتيوب (مثال: https://www.youtube.com/watch?v=... أو https://youtu.be/...)',
+    },
+    primaryColor: '#FF0000',
+    themeClass: {
+      badgeBg: 'bg-[#FF0000]/10 dark:bg-[#FF0000]/20',
+      badgeText: 'text-[#FF0000]',
+      buttonBg: 'bg-[#FF0000] hover:bg-[#CC0000]',
+      buttonHover: 'hover:bg-[#CC0000]',
+      cardBorder: 'border-[#FF0000]/30',
+      accentGradient: 'from-[#FF0000] to-[#CC0000]',
+      dotColor: '#FF0000',
+    },
+    sampleUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    sampleLabel: 'YouTube HD Video',
+    features: {
+      en: ['1080p Full HD & 720p HD Video Downloads', 'Full YouTube Shorts & Clips Support', 'Extract Clean 320kbps High Quality MP3 Audio', '100% Free, Safe, with No Limit on Downloads'],
+      fr: ['Téléchargements vidéo 1080p Full HD et 720p', 'Prise en charge complète de YouTube Shorts', 'Extraction audio MP3 propre à 320kbps', '100% gratuit, sécurisé et sans limite'],
+      es: ['Descargas de video 1080p Full HD y 720p', 'Compatibilidad total con YouTube Shorts', 'Extracción de audio MP3 limpio a 320kbps', '100% gratis, seguro y sin límites'],
+      ar: ['تحميل بدقة 1080p Full HD و 720p HD الأصلية', 'دعم كامل لمقاطع يوتيوب Shorts والمقاطع الطويلة', 'استخراج صوت MP3 نقي وعالي الجودة 320kbps', 'مجاني 100% وآمن وسريع وبدون أي حدود'],
     },
   },
 };

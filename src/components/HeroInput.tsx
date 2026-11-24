@@ -23,7 +23,7 @@ interface HeroInputProps {
   isLoading: boolean;
   extractError?: string | null;
   onClearError?: () => void;
-  onPlatformDetected?: (platform: 'tiktok' | 'instagram' | 'facebook' | 'threads', url: string) => void;
+  onPlatformDetected?: (platform: 'tiktok' | 'instagram' | 'facebook' | 'threads' | 'youtube', url: string) => void;
 }
 
 export const HeroInput: React.FC<HeroInputProps> = ({
@@ -39,7 +39,7 @@ export const HeroInput: React.FC<HeroInputProps> = ({
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [redirectNotice, setRedirectNotice] = useState<string | null>(null);
   const [pasteSuccess, setPasteSuccess] = useState(false);
-  const [selectedPlatform, setSelectedPlatform] = useState<'all' | 'x' | 'tiktok' | 'instagram' | 'facebook' | 'threads'>('all');
+  const [selectedPlatform, setSelectedPlatform] = useState<'all' | 'x' | 'tiktok' | 'instagram' | 'facebook' | 'threads' | 'youtube'>('all');
   const [xCategory, setXCategory] = useState<XDownloadCategory>('video');
 
   const redirectTimerRef = useRef<number | null>(null);
@@ -86,11 +86,12 @@ export const HeroInput: React.FC<HeroInputProps> = ({
     const platform = detectPlatformFromUrl(normalized);
 
     if (platform && platform !== 'x') {
-      const labels: Record<'tiktok' | 'instagram' | 'facebook' | 'threads', string> = {
+      const labels: Record<'tiktok' | 'instagram' | 'facebook' | 'threads' | 'youtube', string> = {
         tiktok: '⚡ TikTok detected! Switching to TikTok Downloader...',
         instagram: '⚡ Instagram detected! Switching to Instagram Downloader...',
         facebook: '⚡ Facebook detected! Switching to Facebook Downloader...',
         threads: '⚡ Threads detected! Switching to Threads Downloader...',
+        youtube: '⚡ YouTube detected! Switching to YouTube Downloader...',
       };
       setRedirectNotice(labels[platform]);
       if (immediate) {
@@ -299,6 +300,15 @@ export const HeroInput: React.FC<HeroInputProps> = ({
               <span className="w-2 h-2 rounded-full bg-[#A855F7]" />
               <span>Threads</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => onPlatformDetected?.('youtube', '')}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-[#f0f2f5] dark:bg-[#1e2732] text-[#536471] dark:text-[#cfd9de] hover:text-[#FF0000] border border-[#cfd9de]/60 dark:border-[#2f3336]"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#FF0000]" />
+              <span>YouTube</span>
+            </button>
           </div>
         )}
 
@@ -474,6 +484,14 @@ export const HeroInput: React.FC<HeroInputProps> = ({
             className="hover:text-[#E1306C] hover:underline px-2.5 py-1 rounded-lg bg-[#f7f9f9] dark:bg-[#1e2732] border border-[#cfd9de]/60 dark:border-[#2f3336] transition-colors inline-flex items-center gap-1 dark:text-[#cfd9de]"
           >
             📸 Instagram Reel (HD)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onPlatformDetected?.('youtube', SAMPLE_URLS.youtube)}
+            className="hover:text-[#FF0000] hover:underline px-2.5 py-1 rounded-lg bg-[#f7f9f9] dark:bg-[#1e2732] border border-[#cfd9de]/60 dark:border-[#2f3336] transition-colors inline-flex items-center gap-1 dark:text-[#cfd9de]"
+          >
+            ▶️ YouTube (1080p HD)
           </button>
 
           <button

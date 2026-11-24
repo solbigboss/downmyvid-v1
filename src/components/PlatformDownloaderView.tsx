@@ -17,11 +17,11 @@ import { MediaResultCard } from './MediaResultCard';
 import { extractMedia, normalizeUrlInput } from '../services/mediaExtractor';
 
 interface PlatformDownloaderViewProps {
-  platformSlug: 'instagram' | 'tiktok' | 'facebook' | 'threads';
+  platformSlug: 'instagram' | 'tiktok' | 'facebook' | 'threads' | 'youtube';
   currentLang: Language;
   onOpenQr: (url: string, title: string) => void;
   onSaveDownload: (media: TweetMediaData, format: MediaFormat) => void;
-  onSelectPlatform: (slug: 'instagram' | 'tiktok' | 'facebook' | 'threads' | 'home') => void;
+  onSelectPlatform: (slug: 'instagram' | 'tiktok' | 'facebook' | 'threads' | 'youtube' | 'home') => void;
   initialRoute?: { url: string; nonce: number } | null;
 }
 
@@ -177,6 +177,14 @@ export const PlatformDownloaderView: React.FC<PlatformDownloaderViewProps> = ({
         return (
           <div className="w-12 h-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center font-extrabold text-2xl shadow-md">
             @
+          </div>
+        );
+      case 'youtube':
+        return (
+          <div className="w-12 h-12 rounded-2xl bg-[#FF0000] text-white flex items-center justify-center shadow-md">
+            <svg className="w-7 h-7 fill-current" viewBox="0 0 24 24">
+              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
           </div>
         );
     }
@@ -389,7 +397,7 @@ export const PlatformDownloaderView: React.FC<PlatformDownloaderViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {(['instagram', 'tiktok', 'facebook', 'threads'] as const).map((slug) => {
+            {(['youtube', 'instagram', 'tiktok', 'facebook', 'threads'] as const).map((slug) => {
               const p = PLATFORMS_CONFIG[slug];
               const isCurrent = slug === platformSlug;
               return (

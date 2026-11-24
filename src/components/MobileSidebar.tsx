@@ -276,6 +276,19 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
           </div>
 
           {/* Section 3: Language Selector */}
+              {/* YouTube */}
+              <button
+                onClick={() => handleSelectTab('youtube')}
+                className={`p-2.5 rounded-xl border flex items-center gap-2 font-bold transition-all ${
+                  activeTab === 'youtube'
+                    ? 'border-[#FF0000] bg-[#FF0000]/10 text-[#FF0000]'
+                    : 'border-[#cfd9de]/60 dark:border-[#2f3336] bg-[#f7f9f9] dark:bg-[#1e2732] text-[#0f1419] dark:text-[#cfd9de] hover:border-[#FF0000]'
+                }`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-[#FF0000] shrink-0" />
+                <span>YouTube</span>
+              </button>
+
               {/* TikTok */}
               <button
                 onClick={() => handleSelectTab('tiktok')}
