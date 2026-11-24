@@ -1,11 +1,15 @@
 # DownMyVid production container for Render
 FROM node:26-bookworm-slim
 
-# Install FFmpeg and process manager
+# Install FFmpeg, Python, yt-dlp, and process manager
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     dumb-init \
     ca-certificates \
+    curl \
+    python3 \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod a+rx /usr/local/bin/yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

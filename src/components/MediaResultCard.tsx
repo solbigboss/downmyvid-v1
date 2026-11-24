@@ -443,10 +443,10 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
         window.setTimeout(() => setDownloadComplete(null), 5000);
       } else if (backendMissingForHls) {
         const msgMap: Record<Language, string> = {
-          en: 'MP3 conversion & Live/Spaces capture require the Express backend server (not available on static-only Firebase Hosting).',
-          fr: 'La conversion MP3 et la capture Live/Spaces nécessitent le serveur backend Express.',
-          es: 'La conversión a MP3 y la captura en vivo/Spaces requieren el servidor backend Express.',
-          ar: 'تحويل MP3 وتحميل البث المباشر/المساحات يتطلب تشغيل خادم Express الخلفي (غير متاح على الاستضافة الساكنة وحدها).',
+          en: 'YouTube direct download & MP3 conversion require the active backend server (not available on static-only hosting).',
+          fr: 'Le téléchargement YouTube direct et la conversion MP3 nécessitent le serveur backend.',
+          es: 'La descarga directa de YouTube y conversión a MP3 requieren el servidor backend.',
+          ar: 'تحميل يوتيوب المباشر وتحويل MP3 يتطلب تشغيل خادم Express الخلفي.',
         };
         setDownloadError(msgMap[currentLang] || msgMap.en);
       } else {

@@ -1821,7 +1821,7 @@ async function startServer() {
           isPopular: true,
           directUrl: directVideoUrl
             ? `/api/proxy-download?url=${encodeURIComponent(directVideoUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_1080p.mp4`
-            : primaryVideoUrl,
+            : `/api/proxy-download?url=${encodeURIComponent(cleanInputUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_1080p.mp4&format=1080p`,
         },
         {
           id: `yt_720p_${videoId}`,
@@ -1834,7 +1834,7 @@ async function startServer() {
           format: 'MP4',
           directUrl: directVideoUrl
             ? `/api/proxy-download?url=${encodeURIComponent(directVideoUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_720p.mp4`
-            : primaryVideoUrl,
+            : `/api/proxy-download?url=${encodeURIComponent(cleanInputUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_720p.mp4&format=720p`,
         },
         {
           id: `yt_360p_${videoId}`,
@@ -1847,7 +1847,7 @@ async function startServer() {
           format: 'MP4',
           directUrl: directVideoUrl
             ? `/api/proxy-download?url=${encodeURIComponent(directVideoUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_360p.mp4`
-            : primaryVideoUrl,
+            : `/api/proxy-download?url=${encodeURIComponent(cleanInputUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_360p.mp4&format=360p`,
         },
         {
           id: `yt_mp3_320_${videoId}`,
@@ -1860,7 +1860,7 @@ async function startServer() {
           isPopular: true,
           directUrl: directAudioUrl
             ? `/api/proxy-download?url=${encodeURIComponent(directAudioUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_320k.mp3`
-            : (directVideoUrl ? `/api/proxy-download?url=${encodeURIComponent(directVideoUrl)}&filename=Downmyvid_YouTube_${safeAuthor}.mp3` : primaryVideoUrl),
+            : `/api/proxy-download?url=${encodeURIComponent(cleanInputUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_320k.mp3&format=mp3`,
         },
         {
           id: `yt_mp3_128_${videoId}`,
@@ -1872,7 +1872,7 @@ async function startServer() {
           format: 'MP3',
           directUrl: directAudioUrl
             ? `/api/proxy-download?url=${encodeURIComponent(directAudioUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_128k.mp3`
-            : (directVideoUrl ? `/api/proxy-download?url=${encodeURIComponent(directVideoUrl)}&filename=Downmyvid_YouTube_${safeAuthor}.mp3` : primaryVideoUrl),
+            : `/api/proxy-download?url=${encodeURIComponent(cleanInputUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_128k.mp3&format=mp3`,
         },
       ],
     };
@@ -2295,6 +2295,51 @@ async function startServer() {
       // Handle remote URLs with SSRF protection
       if (!isSafeExternalUrl(targetUrl)) {
         return res.status(403).send('Invalid or restricted target URL');
+      }
+
+      // Handle YouTube downloads directly via yt-dlp stream
+      const isYouTubeTarget =
+        targetUrl.includes('youtube.com') ||
+        targetUrl.includes('youtu.be');
+
+      if (isYouTubeTarget) {
+        const isMp3 = (req.query.format as string) === 'mp3' || filename.endsWith('.mp3');
+        const qualityFormat = (req.query.format as string) || '';
+
+        res.setHeader('Content-Type', isMp3 ? 'audio/mpeg' : 'video/mp4');
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+        res.setHeader('Cache-Control', 'no-store');
+
+        const ytdlpArgs = isMp3
+          ? ['-x', '--audio-format', 'mp3', '-o', '-', '--no-warnings', targetUrl]
+          : [
+              '-f',
+              qualityFormat === '1080p'
+                ? 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best'
+                : qualityFormat === '720p'
+                ? 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best'
+                : 'best[height<=360][ext=mp4]/best',
+              '-o', '-',
+              '--no-warnings',
+              targetUrl
+            ];
+
+        const ytdlpProc = spawn('yt-dlp', ytdlpArgs);
+
+        ytdlpProc.stdout.pipe(res);
+
+        ytdlpProc.on('error', (err) => {
+          console.error('[youtube] yt-dlp stream error:', err);
+          if (!res.headersSent) {
+            res.status(500).send('YouTube processing failed');
+          }
+        });
+
+        req.on('close', () => {
+          ytdlpProc.kill('SIGTERM');
+        });
+
+        return;
       }
 
       const upstreamTimeout = withTimeoutSignal(30000);

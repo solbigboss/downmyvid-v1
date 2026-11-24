@@ -64,14 +64,14 @@ export function isPlaceholderUrl(rawUrl?: string | null): boolean {
 export function isValidMediaStreamUrl(rawUrl?: string | null): rawUrl is string {
   if (!rawUrl || isPlaceholderUrl(rawUrl)) return false;
   const trimmed = rawUrl.trim();
+  if (isApiProxyPath(trimmed)) {
+    return !isPlaceholderUrl(rawUrl);
+  }
   // YouTube watch pages and social media post pages are NOT media streams
   if (/(?:youtube\.com\/(?:watch|shorts|embed)|youtu\.be\/|twitter\.com\/.*\/status|x\.com\/.*\/status|instagram\.com\/(?:p|reel)|facebook\.com\/)/i.test(trimmed)) {
     return false;
   }
   if (/^https?:\/\/.+/i.test(trimmed)) return true;
-  if (isApiProxyPath(trimmed)) {
-    return !isPlaceholderUrl(rawUrl);
-  }
   return false;
 }
 
@@ -1214,7 +1214,7 @@ async function extractYouTubeMedia(
       sizeMb: 42.5,
       format: 'MP4',
       isPopular: true,
-      directUrl: directVideoUrl || '',
+      directUrl: directVideoUrl || `/api/proxy-download?url=${encodeURIComponent(cleanUrl)}&filename=Downmyvid_YouTube_${videoId}_1080p.mp4&format=1080p`,
     },
     {
       id: `yt_720p_${videoId}`,
@@ -1225,7 +1225,7 @@ async function extractYouTubeMedia(
       fps: 30,
       sizeMb: 24.2,
       format: 'MP4',
-      directUrl: directVideoUrl || '',
+      directUrl: directVideoUrl || `/api/proxy-download?url=${encodeURIComponent(cleanUrl)}&filename=Downmyvid_YouTube_${videoId}_720p.mp4&format=720p`,
     },
     {
       id: `yt_360p_${videoId}`,
@@ -1236,7 +1236,7 @@ async function extractYouTubeMedia(
       fps: 30,
       sizeMb: 9.8,
       format: 'MP4',
-      directUrl: directVideoUrl || '',
+      directUrl: directVideoUrl || `/api/proxy-download?url=${encodeURIComponent(cleanUrl)}&filename=Downmyvid_YouTube_${videoId}_360p.mp4&format=360p`,
     },
     {
       id: `yt_mp3_320_${videoId}`,
@@ -1247,7 +1247,7 @@ async function extractYouTubeMedia(
       sizeMb: 5.4,
       format: 'MP3',
       isPopular: true,
-      directUrl: directAudioUrl || '',
+      directUrl: directAudioUrl || `/api/proxy-download?url=${encodeURIComponent(cleanUrl)}&filename=Downmyvid_YouTube_${videoId}_320k.mp3&format=mp3`,
     },
     {
       id: `yt_mp3_128_${videoId}`,
@@ -1257,7 +1257,7 @@ async function extractYouTubeMedia(
       bitrate: '128 kbps',
       sizeMb: 2.8,
       format: 'MP3',
-      directUrl: directAudioUrl || '',
+      directUrl: directAudioUrl || `/api/proxy-download?url=${encodeURIComponent(cleanUrl)}&filename=Downmyvid_YouTube_${videoId}_128k.mp3&format=mp3`,
     },
   ];
 
