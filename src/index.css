@@ -80,3 +80,90 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #8b98a5;
 }
+
+/* 3D Glassmorphism UI styles from downmyvid_ui_3d.html */
+.icon-btn-3d {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(180deg, #2a354d, #141b2d);
+  box-shadow: 
+    inset 0px 2px 2px rgba(255, 255, 255, 0.15), 
+    inset 0px -4px 6px rgba(0, 0, 0, 0.4), 
+    0px 10px 15px rgba(0, 0, 0, 0.45);
+}
+@media (min-width: 640px) {
+  .icon-btn-3d {
+    width: 64px;
+    height: 64px;
+  }
+}
+.icon-btn-3d:hover {
+  transform: translateY(-4px) scale(1.05);
+}
+.icon-btn-3d:active {
+  transform: translateY(1px) scale(0.95);
+}
+
+.icon-btn-3d.btn-globe { color: #3bb3ff; }
+.icon-btn-3d.btn-globe:hover, .icon-btn-3d.btn-globe.active {
+  border: 2px solid #3bb3ff;
+  box-shadow: 0px 0px 20px rgba(59, 179, 255, 0.6), inset 0px 2px 4px rgba(255, 255, 255, 0.2), inset 0px -4px 6px rgba(0, 0, 0, 0.6);
+}
+
+.icon-btn-3d.btn-xtwitter { color: #a1a1aa; }
+.icon-btn-3d.btn-xtwitter:hover, .icon-btn-3d.btn-xtwitter.active {
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: 0px 0px 20px rgba(255, 255, 255, 0.6), inset 0px 2px 4px rgba(255, 255, 255, 0.2), inset 0px -4px 6px rgba(0, 0, 0, 0.6);
+}
+
+.icon-btn-3d.btn-tiktok { color: #00f2fe; }
+.icon-btn-3d.btn-tiktok:hover, .icon-btn-3d.btn-tiktok.active {
+  border: 2px solid #00f2fe;
+  background: linear-gradient(180deg, #1c2638, #0b111e);
+  box-shadow: 0px 0px 20px rgba(0, 242, 254, 0.6), inset 0px 2px 4px rgba(255, 255, 255, 0.2), inset 0px -4px 6px rgba(0, 0, 0, 0.6);
+}
+
+.icon-btn-3d.btn-instagram {
+  color: white;
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  box-shadow: inset 0px 2px 2px rgba(255, 255, 255, 0.4), inset 0px -4px 6px rgba(0, 0, 0, 0.3), 0px 10px 15px rgba(0, 0, 0, 0.5);
+}
+.icon-btn-3d.btn-instagram:hover, .icon-btn-3d.btn-instagram.active {
+  box-shadow: 0px 0px 24px rgba(225, 48, 108, 0.8), inset 0px 2px 2px rgba(255, 255, 255, 0.5), inset 0px -4px 6px rgba(0, 0, 0, 0.3), 0px 10px 15px rgba(0, 0, 0, 0.5);
+}
+
+.icon-btn-3d.btn-facebook {
+  color: white;
+  background: linear-gradient(180deg, #4267B2, #2d4a86);
+  box-shadow: inset 0px 2px 2px rgba(255, 255, 255, 0.3), inset 0px -4px 6px rgba(0, 0, 0, 0.4), 0px 10px 15px rgba(0, 0, 0, 0.5);
+}
+.icon-btn-3d.btn-facebook:hover, .icon-btn-3d.btn-facebook.active {
+  box-shadow: 0px 0px 24px rgba(66, 103, 178, 0.8), inset 0px 2px 2px rgba(255, 255, 255, 0.4), inset 0px -4px 6px rgba(0, 0, 0, 0.4), 0px 10px 15px rgba(0, 0, 0, 0.5);
+}
+
+.icon-btn-3d.btn-threads {
+  color: white;
+  background: linear-gradient(180deg, #2a354d, #141b2d);
+  box-shadow: inset 0px 2px 2px rgba(255, 255, 255, 0.15), inset 0px -4px 6px rgba(0, 0, 0, 0.4), 0px 10px 15px rgba(0, 0, 0, 0.5);
+}
+.icon-btn-3d.btn-threads:hover, .icon-btn-3d.btn-threads.active {
+  border: 2px solid #a855f7;
+  box-shadow: 0px 0px 20px rgba(168, 85, 247, 0.7), inset 0px 2px 4px rgba(255, 255, 255, 0.2), inset 0px -4px 6px rgba(0, 0, 0, 0.6);
+}
+
+.icon-btn-3d.btn-youtube {
+  color: white;
+  background: linear-gradient(180deg, #ff4e4e, #cc0000);
+  box-shadow: inset 0px 2px 2px rgba(255, 255, 255, 0.4), inset 0px -4px 6px rgba(0, 0, 0, 0.3), 0px 10px 15px rgba(204, 0, 0, 0.2);
+}
+.icon-btn-3d.btn-youtube:hover, .icon-btn-3d.btn-youtube.active {
+  box-shadow: 0px 0px 25px rgba(255, 0, 0, 0.75), inset 0px 2px 2px rgba(255, 255, 255, 0.5), inset 0px -4px 6px rgba(0, 0, 0, 0.3), 0px 10px 15px rgba(204, 0, 0, 0.3);
+}
