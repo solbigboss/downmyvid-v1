@@ -85,6 +85,11 @@ export const HeroInput: React.FC<HeroInputProps> = ({
     const normalized = normalizeUrlInput(rawUrl);
     const platform = detectPlatformFromUrl(normalized);
 
+    // If user is currently in MP3 mode, stay in MP3 mode and extract direct MP3 audio
+    if (activeTab === 'mp3') {
+      return false;
+    }
+
     if (platform && platform !== 'x') {
       const labels: Record<'tiktok' | 'instagram' | 'facebook' | 'threads' | 'youtube', string> = {
         tiktok: '⚡ TikTok detected! Switching to TikTok Downloader...',
@@ -223,6 +228,8 @@ export const HeroInput: React.FC<HeroInputProps> = ({
             <span>Facebook</span>
             <span className="w-1.5 h-1.5 rounded-full bg-[#A855F7] inline-block" />
             <span>Threads</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#FF0000] inline-block" />
+            <span>YouTube</span>
           </div>
         </div>
 

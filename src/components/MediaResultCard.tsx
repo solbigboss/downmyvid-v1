@@ -724,6 +724,10 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
           {media.formats.map((fmt) => {
             const isDownloadingThis = activeDownloadId === fmt.id;
+            const isAudioBackendRequired =
+              fmt.type === 'audio' &&
+              (media.isSpaces || Boolean(fmt.directUrl?.includes('/api/hls-download'))) &&
+              !backendAvailable;
             return (
               <div
                 key={fmt.id}
@@ -754,10 +758,10 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
 
                   <div className="min-w-0 flex-1">
                     <div className="font-extrabold text-xs sm:text-sm text-[#0f1419] dark:text-white leading-tight">
-                      {fmt.type === 'audio' && !backendAvailable ? `${fmt.format} audio (backend required)` : fmt.label}
+                      {isAudioBackendRequired ? `${fmt.format} audio (backend required)` : fmt.label}
                     </div>
                     <div className="text-[11px] sm:text-xs text-[#536471] dark:text-[#8b98a5] font-mono tabular-nums mt-0.5">
-                      {fmt.type === 'audio' && !backendAvailable ? 'Unavailable without Express backend' : `${fmt.resolution || fmt.bitrate || fmt.quality} · ${fmt.sizeMb} MB · ${fmt.format}`}
+                      {isAudioBackendRequired ? 'Unavailable without Express backend' : `${fmt.resolution || fmt.bitrate || fmt.quality} · ${fmt.sizeMb} MB · ${fmt.format}`}
                     </div>
                   </div>
                 </div>
@@ -771,7 +775,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
                   )}
                   <button
                     type="button"
-                    disabled={isDownloadingThis || (fmt.type === 'audio' && !backendAvailable)}
+                    disabled={isDownloadingThis || isAudioBackendRequired}
                     onClick={() => handleDownload(fmt)}
                     className={`touch-target px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs shrink-0 active:scale-95 ${
                       fmt.isPopular

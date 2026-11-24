@@ -1850,15 +1850,28 @@ async function startServer() {
             : primaryVideoUrl,
         },
         {
-          id: `yt_mp3_${videoId}`,
-          label: 'High Quality MP3 Audio',
+          id: `yt_mp3_320_${videoId}`,
+          label: 'High Quality 320kbps MP3',
           type: 'audio',
           quality: '320kbps MP3',
           bitrate: '320 kbps',
           sizeMb: 5.4,
           format: 'MP3',
+          isPopular: true,
           directUrl: directAudioUrl
             ? `/api/proxy-download?url=${encodeURIComponent(directAudioUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_320k.mp3`
+            : (directVideoUrl ? `/api/proxy-download?url=${encodeURIComponent(directVideoUrl)}&filename=Downmyvid_YouTube_${safeAuthor}.mp3` : primaryVideoUrl),
+        },
+        {
+          id: `yt_mp3_128_${videoId}`,
+          label: 'Fast Mobile 128kbps MP3',
+          type: 'audio',
+          quality: '128kbps MP3',
+          bitrate: '128 kbps',
+          sizeMb: 2.8,
+          format: 'MP3',
+          directUrl: directAudioUrl
+            ? `/api/proxy-download?url=${encodeURIComponent(directAudioUrl)}&filename=Downmyvid_YouTube_${safeAuthor}_128k.mp3`
             : (directVideoUrl ? `/api/proxy-download?url=${encodeURIComponent(directVideoUrl)}&filename=Downmyvid_YouTube_${safeAuthor}.mp3` : primaryVideoUrl),
         },
       ],
