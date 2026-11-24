@@ -344,35 +344,14 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
       return;
     }
 
-    // Handle YouTube download: if running on static hosting without a direct media stream, route to verified downloader
-    const isYouTubeUrl =
-      isYouTube ||
-      Boolean(
-        rawTargetUrl &&
-          (rawTargetUrl.includes('youtube.com') ||
-            rawTargetUrl.includes('youtu.be') ||
-            rawTargetUrl.includes('y2mate.is'))
-      );
-
-    if (isYouTubeUrl && !rawTargetUrl?.startsWith('/api/') && !isValidMediaStreamUrl(rawTargetUrl)) {
-      const vid = ytVideoId || (rawTargetUrl + ' ' + (media.originalUrl || '')).match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/i)?.[1];
-      const downloadTarget = vid ? `https://www.y2mate.is/watch?v=${vid}` : (rawTargetUrl || '');
-      if (downloadTarget) {
-        const a = document.createElement('a');
-        a.href = downloadTarget;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setDownloadComplete(format.id);
-        window.setTimeout(() => setDownloadComplete(null), 4000);
-        return;
-      }
-    }
-
     if (!isValidMediaStreamUrl(rawTargetUrl)) {
-      setDownloadError('No valid downloadable media URL was found for this format.');
+      if (isYouTube) {
+        setDownloadError(
+          'Direct YouTube MP4 and MP3 downloading requires an active DownMyVid backend server. Static hosting cannot convert audio or extract streams directly.'
+        );
+      } else {
+        setDownloadError('No valid downloadable media URL was found for this format.');
+      }
       return;
     }
 
@@ -435,17 +414,8 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
               backendMissingForHls = true;
             } else if (isDirectExternalHttps) {
               // Running on static Firebase Hosting without a backend proxy & CDN disallowed CORS fetch:
-              // Never open a YouTube watch page as a direct download fallback
               if (rawTargetUrl.includes('youtube.com') || rawTargetUrl.includes('youtu.be')) {
-                const vid = ytVideoId || rawTargetUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/i)?.[1];
-                const a = document.createElement('a');
-                a.href = vid ? `https://www.y2mate.is/watch?v=${vid}` : rawTargetUrl;
-                a.target = '_blank';
-                a.rel = 'noopener noreferrer';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                downloaded = true;
+                setDownloadError('Direct YouTube stream download requires the DownMyVid backend proxy.');
               } else {
                 const a = document.createElement('a');
                 a.href = rawTargetUrl;
