@@ -8,7 +8,7 @@ const PLACEHOLDER_PATH_PATTERNS = [
 ];
 
 export function getApiBaseUrl(): string {
-  const raw = ((import.meta as any).env?.VITE_API_BASE_URL || '').trim();
+  const raw = ((import.meta as any).env?.VITE_API_BASE_URL || 'https://downmyvid-meta-api.saddikos97.workers.dev').trim();
   return raw ? raw.replace(/\/+$/, '') : '';
 }
 
@@ -63,8 +63,13 @@ export function isPlaceholderUrl(rawUrl?: string | null): boolean {
 
 export function isValidMediaStreamUrl(rawUrl?: string | null): rawUrl is string {
   if (!rawUrl || isPlaceholderUrl(rawUrl)) return false;
-  if (/^https?:\/\/.+/i.test(rawUrl.trim())) return true;
-  if (isApiProxyPath(rawUrl.trim())) {
+  const trimmed = rawUrl.trim();
+  // YouTube watch pages and social media post pages are NOT media streams
+  if (/(?:youtube\.com\/(?:watch|shorts|embed)|youtu\.be\/|twitter\.com\/.*\/status|x\.com\/.*\/status|instagram\.com\/(?:p|reel)|facebook\.com\/|y2mate\.is)/i.test(trimmed)) {
+    return false;
+  }
+  if (/^https?:\/\/.+/i.test(trimmed)) return true;
+  if (isApiProxyPath(trimmed)) {
     return !isPlaceholderUrl(rawUrl);
   }
   return false;
@@ -1198,7 +1203,7 @@ async function extractYouTubeMedia(
     if (err?.name === 'AbortError' && signal?.aborted) throw err;
   }
 
-  const primaryVideoUrl = directVideoUrl || `https://www.youtube.com/watch?v=${videoId}`;
+  const fallbackConverterUrl = `https://www.y2mate.is/watch?v=${videoId}`;
   const formats: MediaFormat[] = [
     {
       id: `yt_1080p_${videoId}`,
@@ -1210,7 +1215,7 @@ async function extractYouTubeMedia(
       sizeMb: 42.5,
       format: 'MP4',
       isPopular: true,
-      directUrl: directVideoUrl || primaryVideoUrl,
+      directUrl: directVideoUrl || fallbackConverterUrl,
     },
     {
       id: `yt_720p_${videoId}`,
@@ -1221,7 +1226,7 @@ async function extractYouTubeMedia(
       fps: 30,
       sizeMb: 24.2,
       format: 'MP4',
-      directUrl: directVideoUrl || primaryVideoUrl,
+      directUrl: directVideoUrl || fallbackConverterUrl,
     },
     {
       id: `yt_360p_${videoId}`,
@@ -1232,7 +1237,7 @@ async function extractYouTubeMedia(
       fps: 30,
       sizeMb: 9.8,
       format: 'MP4',
-      directUrl: directVideoUrl || primaryVideoUrl,
+      directUrl: directVideoUrl || fallbackConverterUrl,
     },
     {
       id: `yt_mp3_320_${videoId}`,
@@ -1243,7 +1248,7 @@ async function extractYouTubeMedia(
       sizeMb: 5.4,
       format: 'MP3',
       isPopular: true,
-      directUrl: directAudioUrl || directVideoUrl || primaryVideoUrl,
+      directUrl: directAudioUrl || fallbackConverterUrl,
     },
     {
       id: `yt_mp3_128_${videoId}`,
@@ -1253,7 +1258,7 @@ async function extractYouTubeMedia(
       bitrate: '128 kbps',
       sizeMb: 2.8,
       format: 'MP3',
-      directUrl: directAudioUrl || directVideoUrl || primaryVideoUrl,
+      directUrl: directAudioUrl || fallbackConverterUrl,
     },
   ];
 
@@ -1273,7 +1278,7 @@ async function extractYouTubeMedia(
     likeCount: '85K',
     retweetCount: '9.4K',
     thumbnailUrl: thumbnail,
-    videoUrl: primaryVideoUrl,
+    videoUrl: directVideoUrl || '',
     audioUrl: directAudioUrl || undefined,
     formats,
   };

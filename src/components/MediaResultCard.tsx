@@ -48,6 +48,13 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
 }) => {
   const safeDuration = Math.max(2, Math.round(media.durationSeconds || 10));
 
+  const isYouTube =
+    Boolean(media.id && media.id.startsWith('yt_')) ||
+    Boolean(media.originalUrl && (media.originalUrl.includes('youtube.com') || media.originalUrl.includes('youtu.be')));
+  const ytVideoId =
+    (media.id && media.id.replace(/^yt_/, '')) ||
+    (media.originalUrl?.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/i)?.[1] || '');
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -117,6 +124,11 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
     const streamUrl = rawStreamUrl ? resolveApiUrl(rawStreamUrl) : '';
     const targetEl: HTMLMediaElement | null = media.isSpaces ? audioRef.current : videoRef.current;
 
+    // YouTube uses embedded iframe player for preview when direct stream is not an mp4
+    if (isYouTube && !isValidMediaStreamUrl(rawStreamUrl)) {
+      return;
+    }
+
     if (targetEl && streamUrl) {
       targetEl.pause();
       targetEl.setAttribute('referrerpolicy', 'no-referrer');
@@ -159,6 +171,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
   }, [media.id, media.videoUrl, media.audioUrl, media.originalUrl, media.isSpaces, safeDuration]);
 
   const handlePreviewMediaError = async () => {
+    if (isYouTube) return;
     const rawStreamUrl = media.isSpaces ? media.audioUrl || media.videoUrl : media.videoUrl;
     const targetEl: HTMLMediaElement | null = media.isSpaces ? audioRef.current : videoRef.current;
 
@@ -330,6 +343,34 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
       setDownloadError('MP3 conversion requires the Express backend. It is not available on static Firebase Hosting.');
       return;
     }
+
+    // Handle YouTube download: if running on static hosting without a direct media stream, route to verified downloader
+    const isYouTubeUrl =
+      isYouTube ||
+      Boolean(
+        rawTargetUrl &&
+          (rawTargetUrl.includes('youtube.com') ||
+            rawTargetUrl.includes('youtu.be') ||
+            rawTargetUrl.includes('y2mate.is'))
+      );
+
+    if (isYouTubeUrl && !rawTargetUrl?.startsWith('/api/') && !isValidMediaStreamUrl(rawTargetUrl)) {
+      const vid = ytVideoId || (rawTargetUrl + ' ' + (media.originalUrl || '')).match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/i)?.[1];
+      const downloadTarget = vid ? `https://www.y2mate.is/watch?v=${vid}` : (rawTargetUrl || '');
+      if (downloadTarget) {
+        const a = document.createElement('a');
+        a.href = downloadTarget;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setDownloadComplete(format.id);
+        window.setTimeout(() => setDownloadComplete(null), 4000);
+        return;
+      }
+    }
+
     if (!isValidMediaStreamUrl(rawTargetUrl)) {
       setDownloadError('No valid downloadable media URL was found for this format.');
       return;
@@ -394,18 +435,30 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
               backendMissingForHls = true;
             } else if (isDirectExternalHttps) {
               // Running on static Firebase Hosting without a backend proxy & CDN disallowed CORS fetch:
-              // trigger direct no-referrer download link fallback instead of failing.
-              const a = document.createElement('a');
-              a.href = rawTargetUrl;
-              a.download = filename;
-              a.target = '_blank';
-              a.rel = 'noopener noreferrer';
-              a.referrerPolicy = 'no-referrer';
-              a.style.display = 'none';
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              downloaded = true;
+              // Never open a YouTube watch page as a direct download fallback
+              if (rawTargetUrl.includes('youtube.com') || rawTargetUrl.includes('youtu.be')) {
+                const vid = ytVideoId || rawTargetUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/i)?.[1];
+                const a = document.createElement('a');
+                a.href = vid ? `https://www.y2mate.is/watch?v=${vid}` : rawTargetUrl;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                downloaded = true;
+              } else {
+                const a = document.createElement('a');
+                a.href = rawTargetUrl;
+                a.download = filename;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.referrerPolicy = 'no-referrer';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                downloaded = true;
+              }
             }
           }
         } catch (err: any) {
@@ -545,6 +598,14 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
                 ))}
               </div>
             </div>
+          ) : isYouTube && ytVideoId ? (
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${ytVideoId}?autoplay=0&rel=0`}
+              title={media.tweetText || 'YouTube Video Player'}
+              className="w-full h-full border-0 rounded-2xl"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
           ) : videoError ? (
             <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-white bg-[#0f1419]">
               <AlertCircle className="w-10 h-10 text-rose-400 mb-3" />
@@ -569,7 +630,7 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
           )}
 
           {/* Floating Minimal Touch Player Controls */}
-          {!videoError && (
+          {!videoError && !isYouTube && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
               <button
                 onClick={togglePlay}
@@ -582,54 +643,56 @@ export const MediaResultCard: React.FC<MediaResultCardProps> = ({
           )}
 
           {/* Bottom Bar Controls */}
-          <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-between text-white text-xs">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={togglePlay}
-                disabled={!!videoError}
-                className="touch-target p-1 hover:text-[#1d9bf0] transition-colors disabled:opacity-40"
-                aria-label="Play/Pause"
-              >
-                {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={toggleMute}
-                disabled={!!videoError}
-                className="touch-target p-1 hover:text-[#1d9bf0] transition-colors disabled:opacity-40"
-                aria-label="Mute/Unmute"
-              >
-                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-              </button>
-              <span className="font-mono tabular-nums text-[11px] text-[#cfd9de]">
-                {formatDuration(currentTime)} / {formatDuration(media.durationSeconds || 0)}
-              </span>
-            </div>
+          {!isYouTube && (
+            <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-between text-white text-xs">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={togglePlay}
+                  disabled={!!videoError}
+                  className="touch-target p-1 hover:text-[#1d9bf0] transition-colors disabled:opacity-40"
+                  aria-label="Play/Pause"
+                >
+                  {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={toggleMute}
+                  disabled={!!videoError}
+                  className="touch-target p-1 hover:text-[#1d9bf0] transition-colors disabled:opacity-40"
+                  aria-label="Mute/Unmute"
+                >
+                  {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                </button>
+                <span className="font-mono tabular-nums text-[11px] text-[#cfd9de]">
+                  {formatDuration(currentTime)} / {formatDuration(media.durationSeconds || 0)}
+                </span>
+              </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setTrimmerActive((prev) => !prev)}
-                className={`touch-target px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors ${
-                  trimmerActive ? 'bg-[#1d9bf0] text-white' : 'bg-white/20 hover:bg-white/30 text-white'
-                }`}
-                title="Trim clip duration"
-              >
-                <Scissors className="w-3.5 h-3.5" />
-                <span>Trim</span>
-              </button>
-              <button
-                onClick={handleFullscreen}
-                disabled={!!videoError}
-                className="touch-target p-1 hover:text-[#1d9bf0] transition-colors disabled:opacity-40"
-                aria-label="Fullscreen"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setTrimmerActive((prev) => !prev)}
+                  className={`touch-target px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors ${
+                    trimmerActive ? 'bg-[#1d9bf0] text-white' : 'bg-white/20 hover:bg-white/30 text-white'
+                  }`}
+                  title="Trim clip duration"
+                >
+                  <Scissors className="w-3.5 h-3.5" />
+                  <span>Trim</span>
+                </button>
+                <button
+                  onClick={handleFullscreen}
+                  disabled={!!videoError}
+                  className="touch-target p-1 hover:text-[#1d9bf0] transition-colors disabled:opacity-40"
+                  aria-label="Fullscreen"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Clip Trimmer Drawer */}
-        {trimmerActive && (
+        {trimmerActive && !isYouTube && (
           <div className="mt-3 p-4 bg-[#f7f9f9] dark:bg-[#1e2732] border border-[#cfd9de] dark:border-[#2f3336] rounded-2xl animate-in fade-in duration-200">
             <div className="flex items-center justify-between text-xs font-bold text-[#0f1419] dark:text-white mb-2">
               <span className="flex items-center gap-1.5">
