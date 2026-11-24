@@ -7,7 +7,9 @@ const SOURCE_HOSTS = new Set([
   'instagram.com', 'www.instagram.com', 'm.instagram.com',
   'facebook.com', 'www.facebook.com', 'm.facebook.com', 'mbasic.facebook.com',
   'web.facebook.com', 'fb.watch', 'www.fb.watch',
+  'threads.com', 'www.threads.com', 'threads.net', 'www.threads.net',
 ]);
+const THREADS_HOSTS = new Set(['threads.com', 'www.threads.com', 'threads.net', 'www.threads.net']);
 const IG_HOSTS = new Set(['instagram.com', 'www.instagram.com', 'm.instagram.com']);
 const TWITTER_MEDIA_HOSTS = new Set(['video.twimg.com']);
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
@@ -38,12 +40,22 @@ export function safeMediaUrl(value) {
 
 function sourceUrl(value) {
   const url = strictUrl(value);
-  if (!url || !SOURCE_HOSTS.has(url.hostname)) throw new Error('Only official HTTPS Instagram and Facebook URLs are supported.');
+  if (!url || !SOURCE_HOSTS.has(url.hostname)) throw new Error('Only official HTTPS Instagram, Facebook and Threads URLs are supported.');
   return url;
 }
 
+function sourcePlatform(url) {
+  if (THREADS_HOSTS.has(url.hostname)) return 'threads';
+  return IG_HOSTS.has(url.hostname) ? 'instagram' : 'facebook';
+}
+
 function identity(url) {
-  if (IG_HOSTS.has(url.hostname)) {
+  const platform = sourcePlatform(url);
+  if (platform === 'threads') {
+    const match = /^\/(?:@([A-Za-z0-9._]{1,64})\/post|t)\/([A-Za-z0-9_-]{1,64})(?:\/(embed|media))?\/?$/.exec(url.pathname);
+    return match ? { platform, id: match[2], handle: match[1], view: match[3] } : null;
+  }
+  if (platform === 'instagram') {
     const match = /^\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]{1,64})\/?$/.exec(url.pathname);
     return match ? { platform: 'instagram', id: match[1], mediaId: shortcodeId(match[1]) } : null;
   }
@@ -63,11 +75,14 @@ function identity(url) {
 export function validatePostUrl(value) {
   try {
     const url = sourceUrl(value);
-    if (!identity(url)) throw new Error('Enter a public Instagram post/reel or Facebook video/reel URL.');
+    if (!identity(url)) {
+      if (sourcePlatform(url) === 'threads') throw failure('THREADS_INVALID_URL', 'Paste a public Threads post URL, not a profile link.');
+      throw new Error('Enter a public Instagram post/reel or Facebook video/reel URL.');
+    }
     url.hash = '';
     return url;
   } catch (error) {
-    error.code = 'INVALID_URL';
+    error.code ||= 'INVALID_URL';
     throw error;
   }
 }
@@ -107,7 +122,10 @@ async function requestText(input, fetchImpl, options = {}) {
         if (/[\u0000-\u0020\\]/.test(location)) throw new Error('Invalid public page redirect.');
         if (/^(?:https?:)?\/\//i.test(location)) sourceUrl(location.startsWith('//') ? `https:${location}` : location);
         const next = sourceUrl(new URL(location, url).href);
-        if (IG_HOSTS.has(next.hostname) !== IG_HOSTS.has(url.hostname)) throw new Error('Cross-platform redirect refused.');
+        if (sourcePlatform(next) !== sourcePlatform(url)) throw new Error('Cross-platform redirect refused.');
+        if (sourcePlatform(url) === 'threads' && (identity(next)?.id !== identity(url)?.id || identity(next)?.view !== 'embed')) {
+          throw new Error('Threads embed redirected to a different or unsupported page.');
+        }
         url = next;
         if (response.status === 303 || ((response.status === 301 || response.status === 302) && init.method === 'POST')) {
           init = { ...init, method: 'GET', body: undefined };
@@ -246,7 +264,7 @@ function image(value) {
 }
 
 function result(media, target, originalUrl, meta) {
-  const variants = target.platform === 'instagram'
+  const variants = target.platform !== 'facebook'
     ? [...(Array.isArray(media.video_versions) ? media.video_versions : []), { url: media.video_url }].map(v => ({ url: v.url, height: v.height, width: v.width }))
     : [
       { url: media.browser_native_hd_url, quality: 'HD' },
@@ -322,10 +340,35 @@ async function anonymousIg(target, fetchImpl) {
   return media;
 }
 
+async function extractThreads(original, target, fetchImpl) {
+  // The public embed exposes native video tags even when the main page is an app shell.
+  const path = target.handle ? `/@${target.handle}/post/${target.id}` : `/t/${target.id}`;
+  const embed = await stage('THREADS_EMBED_UNAVAILABLE', () => requestText(`https://www.threads.com${path}/embed`, fetchImpl, {
+    headers: { 'User-Agent': 'DownMyVid/1.0', Accept: 'text/html' },
+  }));
+  const html = embed.text.replace(/<!--[\s\S]*?-->|<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
+  const videoVersions = [];
+  for (const video of html.matchAll(/(<video\b[^>]*>)([\s\S]*?)<\/video\s*>/gi)) {
+    const tags = [video[1], ...(video[2].match(/<source\b[^>]*>/gi) || [])];
+    for (const tag of tags) {
+      const raw = [...tag.matchAll(/([\w:-]+)\s*=\s*(["'])(.*?)\2/gs)].find(match => match[1].toLowerCase() === 'src')?.[3];
+      const url = raw && safeMediaUrl(entities(raw));
+      if (!url) continue;
+      const media = new URL(url);
+      if (TWITTER_MEDIA_HOSTS.has(media.hostname) || !/\.mp4$/i.test(media.pathname)) continue;
+      videoVersions.push({ url });
+    }
+    if (videoVersions.length) break;
+  }
+  if (!videoVersions.length) throw failure('THREADS_NO_VIDEO', 'No public MP4 was found in this Threads post. Try a public post with a video.');
+  return result({ video_versions: videoVersions, user: { username: target.handle } }, target, original.href, {});
+}
+
 /** Extract only the requested public post; errors are safe to display (no CDN URLs). */
 export async function extractPost(value, fetchImpl = fetch) {
   const original = validatePostUrl(value);
   const initialTarget = identity(original);
+  if (initialTarget.platform === 'threads') return extractThreads(original, initialTarget, fetchImpl);
   const page = await requestText(original.href, fetchImpl);
   const meta = metadata(page.text);
   const finalTarget = identity(page.url);

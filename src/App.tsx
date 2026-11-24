@@ -254,7 +254,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [resetExtractionState]);
 
-  const handlePlatformDetected = (platform: 'tiktok' | 'instagram' | 'facebook' | 'threads', detectedUrl: string) => {
+  const handlePlatformDetected = (platform: 'tiktok' | 'instagram' | 'facebook' | 'threads' | 'youtube', detectedUrl: string) => {
     cancelInFlight();
     setAnalyzedMedia(null);
     setExtractError(null);

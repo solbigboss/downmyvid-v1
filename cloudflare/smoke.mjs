@@ -1,7 +1,12 @@
 const api = process.argv[2]?.replace(/\/+$/, '');
 if (!api || !/^https:\/\//.test(api)) throw new Error('Usage: node smoke.mjs https://your-worker.workers.dev');
 let failures = 0;
-for (const [platform, url] of [['Instagram', 'https://www.instagram.com/reel/Chunk8-jurw/'], ['Facebook', 'https://www.facebook.com/cnn/videos/10155529876156509/']]) {
+const fixtures = [
+  ['Instagram', 'https://www.instagram.com/reel/Chunk8-jurw/'],
+  ['Facebook', 'https://www.facebook.com/cnn/videos/10155529876156509/'],
+  ['Threads', 'https://www.threads.com/@nasa/post/Dfc_lfaAgnE'],
+];
+for (const [platform, url] of fixtures) {
   try {
     const response = await fetch(`${api}/api/extract`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://downmyvid.com' }, body: JSON.stringify({ url }), signal: AbortSignal.timeout(50000) });
     const payload = await response.json();
@@ -28,4 +33,4 @@ for (const [platform, url] of [['Instagram', 'https://www.instagram.com/reel/Chu
   }
 }
 if (failures) { console.error(`${failures} platform(s) failed. Do not deploy the Firebase frontend against this backend yet.`); process.exitCode = 1; }
-else console.log('Both platforms passed from the deployed backend. Proceed to the Firebase build.');
+else console.log('All platforms passed from the deployed backend.');

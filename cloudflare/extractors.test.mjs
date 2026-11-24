@@ -122,6 +122,45 @@ test('login redirect and different post redirects fail', async () => {
   }
 });
 
+test('Threads post links use a canonical public embed and accept only native Meta MP4 sources', async () => {
+  for (const [input, path] of [
+    ['https://www.threads.net/@nasa/post/ABC/media?share=1#video', '/@nasa/post/ABC/embed'],
+    ['https://threads.com/t/ABC/', '/t/ABC/embed'],
+  ]) {
+    const media = await extractPost(input, async (url, options) => {
+      assert.equal(url, `https://www.threads.com${path}`);
+      assert.equal(options.credentials, 'omit');
+      return response(`<script>"<video src='https://video.xx.fbcdn.net/script.mp4'></video>"</script>
+        <video poster="${cdn}"><source src="https://example.test/not-allowed.mp4">
+        <source src="https://video.twimg.com/not-threads.mp4"><source src="https://video.xx.fbcdn.net/manifest.mpd">
+        <source data-src="https://video.xx.fbcdn.net/placeholder.mp4" src="${cdn}&amp;q=1"></video>`);
+    });
+    assert.equal(media.id, 'ABC');
+    assert.equal(media.videoUrl, `${cdn}&q=1`);
+    assert.equal(media.formats.length, 1);
+  }
+  assert.throws(() => validatePostUrl('https://www.threads.com/@nasa'), { code: 'THREADS_INVALID_URL' });
+  await assert.rejects(extractPost('https://www.threads.com/@nasa/post/ABC/', async () => response(`<img src="${cdn}">`)), { code: 'THREADS_NO_VIDEO' });
+});
+
+test('Threads permits only same-post embed redirects on official Threads hosts', async () => {
+  const link = 'https://www.threads.com/@nasa/post/ABC';
+  const samePost = 'https://www.threads.net/@nasa/post/ABC/embed/';
+  let calls = 0;
+  const result = await extractPost(link, async url => ++calls === 1
+    ? new Response(null, { status: 302, headers: { location: samePost } })
+    : (assert.equal(url, samePost), response(`<video src="${cdn}"></video>`)));
+  assert.equal(result.videoUrl, cdn);
+  for (const location of ['/t/OTHER/embed', '/login', '/t/ABC', fb, 'https://threads.com.example.test/t/ABC/embed']) {
+    calls = 0;
+    await assert.rejects(extractPost(link, async () => {
+      calls++;
+      return new Response(null, { status: 302, headers: { location } });
+    }), { code: 'THREADS_EMBED_UNAVAILABLE' });
+    assert.equal(calls, 1);
+  }
+});
+
 test('response header and streamed body limits are enforced', async () => {
   await assert.rejects(extractPost(fb, async () => new Response('', { headers: { 'content-length': String(2 * 1024 * 1024 + 1) } })), /2 MB/);
   await assert.rejects(extractPost(fb, async () => new Response('x'.repeat(2 * 1024 * 1024 + 1))), /2 MB/);

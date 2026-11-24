@@ -54,6 +54,36 @@ test('requires configuration and JSON with bounded input', async () => {
   assert.equal((await worker.fetch(new Request('https://worker.test/api/extract', { method: 'POST', body: '{}' }), env)).status, 415);
   assert.equal((await worker.fetch(new Request('https://worker.test/api/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'x'.repeat(4097) }), env)).status, 413);
 });
+test('Threads extraction returns signed MP4 links and Threads-specific failures', async () => {
+  const post = 'https://www.threads.com/@nasa/post/ABC';
+  const target = 'https://video.xx.fbcdn.net/threads.mp4';
+  const extract = url => worker.fetch(new Request('https://worker.test/api/extract', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://downmyvid.com' }, body: JSON.stringify({ url }),
+  }), env);
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async url => {
+      if (url === target) return new Response('video', { headers: { 'Content-Type': 'video/mp4' } });
+      assert.equal(url, `${post}/embed`);
+      return new Response(`<video><source src="${target}"></video>`);
+    };
+    const extracted = await extract(post);
+    assert.equal(extracted.status, 200);
+    const { data } = await extracted.json();
+    const download = await worker.fetch(new Request(data.formats[0].directUrl), env);
+    assert.equal(download.status, 200);
+    assert.match(download.headers.get('Content-Disposition'), /attachment/);
+    assert.equal(await download.text(), 'video');
+    const profile = await extract('https://www.threads.com/@nasa');
+    assert.equal(profile.status, 400);
+    assert.equal((await profile.json()).code, 'THREADS_INVALID_URL');
+    globalThis.fetch = async () => new Response('<p>Text-only post</p>');
+    const noVideo = await extract(post);
+    assert.equal(noVideo.status, 422);
+    assert.equal((await noVideo.json()).code, 'THREADS_NO_VIDEO');
+  } finally { globalThis.fetch = original; }
+});
+
 test('rate limiter prevents extraction before upstream work', async () => {
   const limited = { ...env, EXTRACT_LIMITER: { limit: async () => ({ success: false }) } };
   const r = await worker.fetch(new Request('https://worker.test/api/extract', { method: 'POST', headers: { 'CF-Connecting-IP': '203.0.113.1' } }), limited);

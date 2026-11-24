@@ -3,6 +3,12 @@ import { extractPost, safeMediaUrl } from './extractors.mjs';
 const encoder = new TextEncoder();
 const ttl = 900;
 const originsDefault = 'https://downmyvid.com,https://www.downmyvid.com,https://gen-lang-client-0451556993.web.app,https://gen-lang-client-0451556993.firebaseapp.com';
+const extractionErrors = {
+  INVALID_URL: [400, 'Paste a public Instagram, Facebook, or Threads video post URL.'],
+  THREADS_INVALID_URL: [400, 'Paste a public Threads post URL, not a profile link.'],
+  THREADS_EMBED_UNAVAILABLE: [422, 'Threads could not load this public post. Check that it opens without signing in and try again.'],
+  THREADS_NO_VIDEO: [422, 'No downloadable MP4 was found in this Threads post. Try a public post that contains a video.'],
+};
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 const hex = bytes => [...new Uint8Array(bytes)].map(n => n.toString(16).padStart(2, '0')).join('');
 async function signature(secret, value) {
@@ -69,7 +75,7 @@ async function route(request, env) {
   if (url.pathname === '/api/health' && request.method === 'GET') return json({ status: 'ok', server: 'DownMyVid Cloudflare Worker', capabilities: { metaExtraction: true, mp3: false, hls: false } });
   if (!env.MEDIA_SIGNING_KEY || env.MEDIA_SIGNING_KEY.length < 32) return json({ error: 'Backend signing key is not configured.' }, 503);
   if (['/api/stream-media', '/api/proxy-download', '/api/x-stream'].includes(url.pathname) && ['GET', 'HEAD'].includes(request.method)) return proxy(request, env, url);
-  if (url.pathname !== '/api/extract') return json({ error: 'This backend supports public Instagram/Facebook MP4 extraction only.' }, 404);
+  if (url.pathname !== '/api/extract') return json({ error: 'Unknown API endpoint.' }, 404);
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405);
   const ip = request.headers.get('CF-Connecting-IP');
   if (env.EXTRACT_LIMITER && ip) { const { success } = await env.EXTRACT_LIMITER.limit({ key: ip }); if (!success) return json({ error: 'Too many requests. Please retry in one minute.' }, 429); }
@@ -93,11 +99,12 @@ export default {
     let response;
     if (request.method === 'OPTIONS') response = new Response(null, { status: 204 });
     else try { response = await route(request, env); } catch (error) {
-      const codes = new Set(['INVALID_URL', 'IG_BOOTSTRAP_FAILED', 'IG_TOKEN_MISSING', 'IG_QUERY_FAILED', 'IG_NON_JSON_RESPONSE', 'IG_MEDIA_UNAVAILABLE']);
-      const code = codes.has(error?.code) ? error.code : 'EXTRACTION_FAILED';
+      const codes = new Set(['IG_BOOTSTRAP_FAILED', 'IG_TOKEN_MISSING', 'IG_QUERY_FAILED', 'IG_NON_JSON_RESPONSE', 'IG_MEDIA_UNAVAILABLE']);
+      const code = Object.hasOwn(extractionErrors, error?.code) || codes.has(error?.code) ? error.code : 'EXTRACTION_FAILED';
       const requestId = crypto.randomUUID();
       console.warn(JSON.stringify({ event: 'extraction_failed', code, requestId }));
-      response = json({ error: code === 'INVALID_URL' ? 'Paste a public Instagram or Facebook video post URL.' : `The platform could not return this video. Error: ${code}. Reference: ${requestId}.`, code, requestId }, code === 'INVALID_URL' ? 400 : 422);
+      const [status, message] = extractionErrors[code] || [422, `The platform could not return this video. Error: ${code}. Reference: ${requestId}.`];
+      response = json({ error: message, code, requestId }, status);
     }
     const headers = new Headers(response.headers);
     if (origin) headers.set('Access-Control-Allow-Origin', origin);
