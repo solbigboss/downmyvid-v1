@@ -122,9 +122,13 @@
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
-  margin: 10px 0 !important;
+  margin: 8px 0 !important;
+  padding: 0 !important;
   z-index: 99999 !important;
   position: relative !important;
+  flex-shrink: 0 !important;
+  width: auto !important;
+  height: auto !important;
 }
 
 .dmv-btn-reel {
@@ -141,6 +145,7 @@
   border: 1px solid rgba(255, 255, 255, 0.3) !important;
   transition: all 0.15s ease !important;
   outline: none !important;
+  flex-shrink: 0 !important;
 }
 
 .dmv-btn-reel:hover {
@@ -170,6 +175,17 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9) !important;
   user-select: none !important;
   pointer-events: none !important;
+  text-align: center !important;
+}
+
+/* Reels Pill Wrapper Fallback (Bottom author / caption area) */
+.dmv-reel-pill-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin: 6px 0 !important;
+  z-index: 99999 !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
 }
 
 /* YouTube Specific Container Placement */

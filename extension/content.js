@@ -1,7 +1,7 @@
 /**
- * DownMyVid Chrome Extension - Content Script (v1.0.3)
+ * DownMyVid Chrome Extension - Content Script (v1.0.4)
  * Precise Sub-Video & Action Bar Injections for YouTube, X (Twitter), Instagram, and Facebook.
- * Native Reels vertical action sidebar + Horizontal timeline action rows.
+ * Resilient Instagram Reels vertical action sidebar + Caption pill + Horizontal feed action rows.
  * Privacy-First: 0 trackers, 0 third-party redirects.
  */
 
@@ -55,6 +55,10 @@
     btn.addEventListener('click', trigger, true);
     btn.addEventListener('pointerdown', (e) => e.stopPropagation(), true);
     btn.addEventListener('mousedown', (e) => e.stopPropagation(), true);
+    btn.addEventListener('mouseup', (e) => e.stopPropagation(), true);
+    btn.addEventListener('pointerup', (e) => e.stopPropagation(), true);
+    btn.addEventListener('touchstart', (e) => e.stopPropagation(), true);
+    btn.addEventListener('touchend', (e) => { e.stopPropagation(); trigger(e); }, true);
   }
 
   /**
@@ -435,75 +439,138 @@
   }
 
   // =========================================================================
-  // 3. INSTAGRAM INJECTOR (Reels Sidebar & Feed Post Action Bar)
+  // 3. INSTAGRAM INJECTOR (Reels Vertical Sidebar + Feed Post Action Bar)
   // =========================================================================
-  function injectInstagram() {
-    const videos = document.querySelectorAll('video');
-
-    videos.forEach((vid) => {
-      const container = vid.closest('article') || 
-                        vid.closest('div[role="dialog"]') || 
-                        vid.closest('div[role="presentation"]') || 
-                        vid.parentElement?.parentElement?.parentElement;
-      if (!container) return;
-
-      const getIgParams = () => {
-        const directSrc = vid.currentSrc || vid.src || '';
-        const domMedia = {
-          directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
-          poster: vid.getAttribute('poster') || '',
-          author: container.querySelector('header a, a[role="link"]')?.textContent?.trim() || 'Instagram Creator',
-          title: container.querySelector('h1, span')?.textContent?.trim().slice(0, 100) || 'Instagram Video',
-        };
-
-        const linkEl = container.querySelector('a[href*="/reel/"], a[href*="/p/"]') || document.querySelector('a[href*="/reel/"]');
-        let postUrl = linkEl ? `https://www.instagram.com${linkEl.getAttribute('href').split('?')[0]}` : null;
-        if (!postUrl && (window.location.pathname.includes('/reel/') || window.location.pathname.includes('/p/'))) {
-          postUrl = `https://www.instagram.com${window.location.pathname.split('?')[0]}`;
+  function getActiveInstagramParams() {
+    // Locate the active playing or primary video on the page
+    const videos = Array.from(document.querySelectorAll('video'));
+    let vid = videos.find((v) => !v.paused && !v.ended && v.currentTime > 0);
+    if (!vid && videos.length > 0) {
+      const centerY = window.innerHeight / 2;
+      let minDiff = Infinity;
+      videos.forEach((v) => {
+        const rect = v.getBoundingClientRect();
+        if (rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight) {
+          const diff = Math.abs(rect.top + rect.height / 2 - centerY);
+          if (diff < minDiff) {
+            minDiff = diff;
+            vid = v;
+          }
         }
-        return { url: postUrl || window.location.href, domMedia };
-      };
+      });
+      if (!vid) vid = videos[0];
+    }
 
-      // Strategy A: Reels Vertical Action Column (Right side of the video)
-      const shareIcon = container.querySelector('svg[aria-label="Share Post"], svg[aria-label="Direct"], svg[aria-label="Share"]');
-      const commentIcon = container.querySelector('svg[aria-label="Comment"]');
-      const likeIcon = container.querySelector('svg[aria-label="Like"], svg[aria-label="Unlike"]');
-      const targetIcon = shareIcon || commentIcon || likeIcon;
+    const directSrc = vid?.currentSrc || vid?.src || '';
+    const domMedia = {
+      directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
+      poster: vid?.getAttribute('poster') || '',
+      author: document.querySelector('header a, a[role="link"]')?.textContent?.trim() || 'Instagram Creator',
+      title: document.querySelector('h1, span')?.textContent?.trim().slice(0, 100) || 'Instagram Video',
+    };
 
-      if (targetIcon) {
-        const actionBtnWrapper = targetIcon.closest('div[role="button"]') || targetIcon.closest('button') || targetIcon.parentElement;
-        const columnParent = actionBtnWrapper?.parentElement;
+    const linkEl = document.querySelector('a[href*="/reel/"], a[href*="/p/"]');
+    const rawHref = linkEl?.getAttribute('href') || linkEl?.href || '';
+    let postUrl = null;
+    if (rawHref) {
+      const cleanPath = rawHref.split('?')[0];
+      postUrl = cleanPath.startsWith('http') ? cleanPath : `https://www.instagram.com${cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath}`;
+    }
+    if (!postUrl && (window.location.pathname.includes('/reel/') || window.location.pathname.includes('/p/'))) {
+      postUrl = `https://www.instagram.com${window.location.pathname.split('?')[0]}`;
+    }
+    return { url: postUrl || window.location.href, domMedia };
+  }
 
-        if (columnParent && !columnParent.querySelector('.dmv-reel-action') && !columnParent.querySelector('.dmv-ig-btn')) {
-          const reelAction = document.createElement('div');
-          reelAction.className = 'dmv-reel-action';
+  function injectInstagram() {
+    // Strategy A: Reels Vertical Action Column (Right side: Like, Comment, Share, More)
+    const actionIcons = document.querySelectorAll(
+      'svg[aria-label*="Share" i], svg[aria-label*="Direct" i], svg[aria-label*="Comment" i], svg[aria-label*="Like" i], svg[aria-label*="Save" i], svg[aria-label*="Bookmark" i], svg[aria-label*="Partager" i], svg[aria-label*="مشاركة" i], svg[aria-label*="Compartir" i], [role="button"][aria-label*="Share" i], [role="button"][aria-label*="Direct" i]'
+    );
 
-          const reelBtn = document.createElement('button');
-          reelBtn.className = 'dmv-btn-reel';
-          reelBtn.setAttribute('type', 'button');
-          reelBtn.setAttribute('title', 'Download with DownMyVid');
-          reelBtn.innerHTML = `<img src="${LOGO_HEADER_URL}" alt="DownMyVid" />`;
+    actionIcons.forEach((icon) => {
+      // Find the true vertical column containing the action buttons
+      let parent = icon.closest('div[role="button"]') || icon.closest('button') || icon.parentElement;
+      if (!parent) return;
 
-          const label = document.createElement('span');
-          label.className = 'dmv-reel-label';
-          label.textContent = 'Save';
+      let column = null;
+      let targetChild = null;
+      let depth = 0;
 
-          attachButtonEvents(reelBtn, getIgParams);
+      while (parent && parent !== document.body && depth < 6) {
+        parent = parent.parentElement;
+        depth++;
+        if (!parent) break;
 
-          reelAction.appendChild(reelBtn);
-          reelAction.appendChild(label);
+        // An action column has at least 2 distinct action icons
+        const svgs = parent.querySelectorAll(
+          'svg[aria-label*="Like" i], svg[aria-label*="Unlike" i], svg[aria-label*="Comment" i], svg[aria-label*="Share" i], svg[aria-label*="Direct" i], svg[aria-label*="Save" i], svg[aria-label*="Bookmark" i], svg[aria-label*="More" i], [role="button"][aria-label*="Like" i], [role="button"][aria-label*="Comment" i]'
+        );
 
-          if (actionBtnWrapper.nextSibling) {
-            columnParent.insertBefore(reelAction, actionBtnWrapper.nextSibling);
-          } else {
-            columnParent.appendChild(reelAction);
+        if (svgs.length >= 2) {
+          const rect = parent.getBoundingClientRect();
+          // Narrow or vertical column, or within /reel/ URL
+          if ((rect.width > 0 && rect.width <= 160) || (rect.height > rect.width) || window.location.pathname.includes('/reel')) {
+            column = parent;
+            // Identify which direct child of column contains this icon
+            for (const child of column.children) {
+              if (child.contains(icon)) {
+                targetChild = child;
+                break;
+              }
+            }
+            break;
           }
         }
       }
 
-      // Strategy B: Feed Post Horizontal Action Bar (Under the video)
-      const actionBar = container.querySelector('section, div[role="presentation"] > div');
-      if (actionBar && !actionBar.querySelector('.dmv-ig-btn') && !actionBar.querySelector('.dmv-reel-action')) {
+      if (column && !column.querySelector('.dmv-reel-action')) {
+        const reelAction = document.createElement('div');
+        reelAction.className = 'dmv-reel-action';
+
+        const reelBtn = document.createElement('button');
+        reelBtn.className = 'dmv-btn-reel';
+        reelBtn.setAttribute('type', 'button');
+        reelBtn.setAttribute('title', 'Download Reel with DownMyVid');
+        reelBtn.innerHTML = `<img src="${LOGO_HEADER_URL}" alt="DownMyVid" />`;
+
+        const label = document.createElement('span');
+        label.className = 'dmv-reel-label';
+        label.textContent = 'Save';
+
+        attachButtonEvents(reelBtn, getActiveInstagramParams);
+
+        reelAction.appendChild(reelBtn);
+        reelAction.appendChild(label);
+
+        // Prefer placing right after the Share item or targetChild
+        let shareChild = null;
+        for (const ch of column.children) {
+          if (ch.querySelector('svg[aria-label*="Share" i], svg[aria-label*="Direct" i], svg[aria-label*="Partager" i], svg[aria-label*="مشاركة" i], [role="button"][aria-label*="Share" i]')) {
+            shareChild = ch;
+            break;
+          }
+        }
+
+        const insertRef = shareChild || targetChild;
+        if (insertRef && insertRef.nextSibling) {
+          column.insertBefore(reelAction, insertRef.nextSibling);
+        } else {
+          column.appendChild(reelAction);
+        }
+      }
+    });
+
+    // Strategy B: Timeline Feed Post Horizontal Action Bar (Under the post video)
+    const feedActionBars = document.querySelectorAll('section, div[role="presentation"] > div');
+    feedActionBars.forEach((actionBar) => {
+      if (actionBar.querySelector('.dmv-ig-btn') || actionBar.querySelector('.dmv-reel-action')) return;
+
+      const hasActions = actionBar.querySelector('svg[aria-label*="Like" i], svg[aria-label*="Comment" i], svg[aria-label*="Share" i]');
+      if (!hasActions) return;
+
+      const rect = actionBar.getBoundingClientRect();
+      if (rect.width > 160 && (rect.height < 140 || rect.width > rect.height)) {
         const wrap = document.createElement('div');
         wrap.className = 'dmv-ig-wrapper';
 
@@ -513,7 +580,7 @@
         btn.setAttribute('title', 'Download video with DownMyVid');
         btn.innerHTML = `${LOGO_ICON_HTML}<span>DownMyVid</span>`;
 
-        attachButtonEvents(btn, getIgParams);
+        attachButtonEvents(btn, getActiveInstagramParams);
 
         wrap.appendChild(btn);
 
@@ -525,6 +592,28 @@
         }
       }
     });
+
+    // Strategy C: Reels Resilient Fallback (Bottom author / caption area)
+    if (window.location.pathname.includes('/reel') || window.location.pathname.includes('/reels')) {
+      const hasAction = document.querySelector('.dmv-reel-action, .dmv-reel-pill-wrapper');
+      if (!hasAction) {
+        const authorLine = document.querySelector('div[class*="x1n2onr6"] h2, div[class*="x1n2onr6"] a, a[role="link"][href*="/"]')?.closest('div');
+        if (authorLine && authorLine.parentElement && !authorLine.parentElement.querySelector('.dmv-reel-pill-wrapper')) {
+          const pillWrap = document.createElement('div');
+          pillWrap.className = 'dmv-reel-pill-wrapper';
+
+          const pillBtn = document.createElement('button');
+          pillBtn.className = 'dmv-btn-under-video';
+          pillBtn.setAttribute('type', 'button');
+          pillBtn.setAttribute('title', 'Download Reel with DownMyVid');
+          pillBtn.innerHTML = `${LOGO_ICON_HTML}<span>Download Reel</span>`;
+
+          attachButtonEvents(pillBtn, getActiveInstagramParams);
+          pillWrap.appendChild(pillBtn);
+          authorLine.parentElement.appendChild(pillWrap);
+        }
+      }
+    }
   }
 
   // =========================================================================
@@ -564,7 +653,6 @@
       const likeBtn = post.querySelector('div[aria-label*="Like" i], div[aria-label*="J’aime" i], div[aria-label*="إعجاب" i]');
       const targetAction = shareBtn || commentBtn || likeBtn;
 
-      // Check if this is a Reel vertical sidebar layout
       const isReelLayout = targetAction && targetAction.closest('div[class*="xurb0ha"], div[role="presentation"], div[class*="x1n2onr6"]');
       if (isReelLayout && !post.querySelector('.dmv-reel-action')) {
         const column = targetAction.parentElement?.parentElement;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DownMyVid - 3D Video Downloader",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Frictionless, 3D-styled video downloader for YouTube, X (Twitter), Instagram, Facebook, and TikTok.",
   "permissions": [
     "storage",
