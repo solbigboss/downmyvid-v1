@@ -266,8 +266,68 @@ async function extractTikTok(url) {
 }
 
 /**
- * 3. Extract Instagram / Meta via Tioo mirror
+ * 3. Extract Instagram / Meta via Embed & Worker & Mirrors
  */
+async function extractInstagram(url) {
+  const shortcodeMatch = url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i);
+  const shortcode = shortcodeMatch ? shortcodeMatch[1] : null;
+
+  // Tier 1: Instagram Embed HTML fetch with direct browser headers
+  if (shortcode) {
+    try {
+      const embedRes = await fetch(`https://www.instagram.com/reel/${shortcode}/embed/captioned/`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(9000),
+      });
+
+      if (embedRes.ok) {
+        const html = await embedRes.text();
+        const m = html.match(/"video_url"\s*:\s*"((?:\\.|[^"\\])+)"/) || html.match(/<meta[^>]+property=["']og:video(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i);
+        if (m && m[1]) {
+          const directUrl = m[1].replace(/\\\//g, '/').replace(/\\u0026/gi, '&').replace(/&amp;/g, '&');
+          if (directUrl.startsWith('http')) {
+            return {
+              id: `ig_${shortcode}`,
+              originalUrl: url,
+              videoUrl: directUrl,
+              thumbnailUrl: '',
+              tweetText: 'Instagram Video',
+              author: { name: 'Instagram Creator', handle: 'instagram' },
+              formats: [
+                {
+                  id: 'ig_hd_embed',
+                  label: 'Instagram 1080p Full HD (Direct MP4)',
+                  quality: '1080p HD',
+                  resolution: 'HD MP4',
+                  format: 'MP4',
+                  type: 'video',
+                  sizeMb: 14.0,
+                  directUrl: directUrl,
+                },
+              ],
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Instagram embed fetch failed:', e.message);
+    }
+  }
+
+  // Tier 2: DownMyVid Cloudflare Worker
+  const workerRes = await extractViaWorker(url);
+  if (workerRes) return workerRes;
+
+  // Tier 3: Tioo mirror
+  const mirrorRes = await extractInstagramMirror(url);
+  if (mirrorRes) return mirrorRes;
+
+  return null;
+}
+
 async function extractInstagramMirror(url) {
   try {
     const res = await fetch(`https://backend1.tioo.eu.org/igdl?url=${encodeURIComponent(url)}`, {
@@ -423,11 +483,7 @@ async function extractMedia(videoUrl, domMedia) {
   } else if (lowerUrl.includes('tiktok.com')) {
     result = await extractTikTok(videoUrl);
   } else if (lowerUrl.includes('instagram.com')) {
-    // Try Worker first, then Instagram mirror
-    result = await extractViaWorker(videoUrl);
-    if (!result) {
-      result = await extractInstagramMirror(videoUrl);
-    }
+    result = await extractInstagram(videoUrl);
   } else if (lowerUrl.includes('facebook.com') || lowerUrl.includes('fb.watch') || lowerUrl.includes('fb.com')) {
     result = await extractFacebook(videoUrl);
   } else {

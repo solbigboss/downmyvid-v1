@@ -13,6 +13,40 @@
   const IS_FACEBOOK = HOSTNAME.includes('facebook.com') || HOSTNAME.includes('fb.com') || HOSTNAME.includes('fb.watch');
   const IS_TIKTOK = HOSTNAME.includes('tiktok.com');
 
+  // Inject in-page sniffer into main world to capture Instagram & Facebook video streams
+  if (IS_INSTAGRAM || IS_FACEBOOK) {
+    try {
+      const snifferScript = document.createElement('script');
+      snifferScript.textContent = `
+        (function() {
+          if (window.__dmv_sniffed) return;
+          window.__dmv_sniffed = true;
+          const capture = (url) => {
+            if (typeof url === 'string' && (url.includes('cdninstagram.com') || url.includes('fbcdn.net')) && (url.includes('.mp4') || url.includes('/v/t16.') || url.includes('bytestart='))) {
+              const clean = url.replace(/&bytestart=\\d+&byteend=\\d+/gi, '').replace(/\\?bytestart=\\d+&byteend=\\d+&?/gi, '?');
+              document.documentElement.dataset.dmvStream = clean;
+            }
+          };
+          const origFetch = window.fetch;
+          window.fetch = function(...args) {
+            try {
+              const u = args[0]?.url || (typeof args[0] === 'string' ? args[0] : '');
+              capture(u);
+            } catch (e) {}
+            return origFetch.apply(this, args);
+          };
+          const origOpen = XMLHttpRequest.prototype.open;
+          XMLHttpRequest.prototype.open = function(method, url) {
+            try { capture(url); } catch (e) {}
+            return origOpen.apply(this, arguments);
+          };
+        })();
+      `;
+      (document.head || document.documentElement).appendChild(snifferScript);
+      snifferScript.remove();
+    } catch (e) {}
+  }
+
   const LOGO_ICON_URL = chrome.runtime.getURL('icons/icon16.png');
   const LOGO_HEADER_URL = chrome.runtime.getURL('icons/icon32.png');
   const LOGO_ICON_HTML = `<img src="${LOGO_ICON_URL}" class="dmv-btn-logo" alt="DownMyVid" />`;
@@ -218,6 +252,31 @@
    */
   function handleDownloadClick(videoUrl, buttonEl, domMedia) {
     const originalContent = buttonEl.innerHTML;
+
+    // Instant modal if active stream is already captured from DOM or network sniffer
+    if (domMedia && domMedia.directUrl) {
+      showQualityModal(videoUrl, {
+        originalUrl: videoUrl,
+        videoUrl: domMedia.directUrl,
+        thumbnailUrl: domMedia.poster || '',
+        tweetText: domMedia.title || 'Direct Video Stream',
+        author: { name: domMedia.author || 'Video Creator' },
+        formats: [
+          {
+            id: 'dom_hd',
+            label: '1080p Full HD MP4 (Instant Stream)',
+            quality: '1080p / Direct',
+            resolution: 'HD MP4',
+            format: 'MP4',
+            type: 'video',
+            sizeMb: 14.5,
+            directUrl: domMedia.directUrl,
+          },
+        ],
+      }, null);
+      return;
+    }
+
     buttonEl.innerHTML = `<span class="dmv-spinner"></span><span>Loading...</span>`;
     buttonEl.style.pointerEvents = 'none';
 
@@ -441,6 +500,55 @@
   // =========================================================================
   // 3. INSTAGRAM INJECTOR (Reels Vertical Sidebar + Feed Post Action Bar)
   // =========================================================================
+  function extractDirectInstagramMedia(vid) {
+    // 1. In-page network sniffer dataset (highest priority: active video stream)
+    if (document.documentElement.dataset.dmvStream && document.documentElement.dataset.dmvStream.startsWith('http')) {
+      return document.documentElement.dataset.dmvStream;
+    }
+
+    // 2. Performance entries recorded by the browser network stack
+    try {
+      const resources = performance.getEntriesByType('resource');
+      for (let i = resources.length - 1; i >= 0; i--) {
+        const name = resources[i].name;
+        if (
+          (name.includes('cdninstagram.com') || name.includes('fbcdn.net')) &&
+          (name.includes('.mp4') || name.includes('/v/t16.') || name.includes('/o1/v/') || name.includes('bytestart=') || name.includes('efg='))
+        ) {
+          const clean = name.replace(/&bytestart=\d+&byteend=\d+/gi, '').replace(/\?bytestart=\d+&byteend=\d+&?/gi, '?');
+          if (clean.startsWith('http')) return clean;
+        }
+      }
+    } catch (e) {}
+
+    // 3. Scan page script tags
+    try {
+      const scripts = document.querySelectorAll('script');
+      for (const s of scripts) {
+        const txt = s.textContent;
+        if (!txt || (!txt.includes('video_url') && !txt.includes('video_versions') && !txt.includes('.mp4'))) continue;
+
+        const m = txt.match(/"video_url"\s*:\s*"((?:\\.|[^"\\])+)"/);
+        if (m && m[1]) {
+          const decoded = m[1].replace(/\\\//g, '/').replace(/\\u0026/gi, '&');
+          if (decoded.startsWith('http') && (decoded.includes('cdninstagram') || decoded.includes('fbcdn'))) {
+            return decoded;
+          }
+        }
+      }
+    } catch (e) {}
+
+    // 4. Video element direct src (if non-blob)
+    if (vid) {
+      const src = vid.currentSrc || vid.src;
+      if (src && src.startsWith('http') && !src.startsWith('blob:')) {
+        return src;
+      }
+    }
+
+    return null;
+  }
+
   function getActiveInstagramParams() {
     // Locate the active playing or primary video on the page
     const videos = Array.from(document.querySelectorAll('video'));
@@ -461,24 +569,35 @@
       if (!vid) vid = videos[0];
     }
 
-    const directSrc = vid?.currentSrc || vid?.src || '';
+    const directStream = extractDirectInstagramMedia(vid);
     const domMedia = {
-      directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
+      directUrl: directStream,
       poster: vid?.getAttribute('poster') || '',
       author: document.querySelector('header a, a[role="link"]')?.textContent?.trim() || 'Instagram Creator',
       title: document.querySelector('h1, span')?.textContent?.trim().slice(0, 100) || 'Instagram Video',
     };
 
-    const linkEl = document.querySelector('a[href*="/reel/"], a[href*="/p/"]');
-    const rawHref = linkEl?.getAttribute('href') || linkEl?.href || '';
     let postUrl = null;
-    if (rawHref) {
-      const cleanPath = rawHref.split('?')[0];
-      postUrl = cleanPath.startsWith('http') ? cleanPath : `https://www.instagram.com${cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath}`;
+    const path = window.location.pathname;
+    if (path.includes('/reel/') || path.includes('/p/')) {
+      const m = path.match(/\/(reel|p)\/([A-Za-z0-9_-]+)/);
+      if (m) {
+        postUrl = `https://www.instagram.com/${m[1]}/${m[2]}/`;
+      }
     }
-    if (!postUrl && (window.location.pathname.includes('/reel/') || window.location.pathname.includes('/p/'))) {
-      postUrl = `https://www.instagram.com${window.location.pathname.split('?')[0]}`;
+
+    if (!postUrl) {
+      const linkEl = vid?.closest('article')?.querySelector('a[href*="/reel/"], a[href*="/p/"]') ||
+                     document.querySelector('a[href*="/reel/"], a[href*="/p/"]');
+      const rawHref = linkEl?.getAttribute('href') || linkEl?.href || '';
+      if (rawHref) {
+        const m = rawHref.match(/\/(reel|p)\/([A-Za-z0-9_-]+)/);
+        if (m) {
+          postUrl = `https://www.instagram.com/${m[1]}/${m[2]}/`;
+        }
+      }
     }
+
     return { url: postUrl || window.location.href, domMedia };
   }
 
