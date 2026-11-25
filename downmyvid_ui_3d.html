@@ -54,7 +54,31 @@
       transform: scale(0.95);
     }
     .icon-btn.globe { color: #3bb3ff; }
-    .icon-btn.x-twitter { color: #a1a1aa; }
+    .icon-btn.x-twitter {
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: radial-gradient(circle at 50% 25%, #2e3a52 0%, #141b2d 75%);
+      box-shadow: 
+        inset 0px 2px 3px rgba(255, 255, 255, 0.35), 
+        inset 0px -4px 6px rgba(0, 0, 0, 0.45), 
+        0px 10px 15px rgba(0, 0, 0, 0.45),
+        0px 0px 14px rgba(255, 255, 255, 0.2);
+    }
+    .icon-btn.x-twitter i {
+      filter: drop-shadow(0px 0px 6px rgba(255, 255, 255, 0.8));
+    }
+    .icon-btn.x-twitter:hover, .icon-btn.active.x-twitter {
+      border: 2px solid #ffffff;
+      background: linear-gradient(180deg, #1c2638, #0b111e);
+      box-shadow: 
+        0px 0px 22px rgba(255, 255, 255, 0.9), 
+        0px 0px 35px rgba(255, 255, 255, 0.4), 
+        inset 0px 2px 4px rgba(255, 255, 255, 0.4), 
+        inset 0px -4px 6px rgba(0, 0, 0, 0.6);
+    }
+    .icon-btn.x-twitter:hover i, .icon-btn.active.x-twitter i {
+      filter: drop-shadow(0px 0px 12px rgba(255, 255, 255, 1));
+    }
     .icon-btn.instagram {
       background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
       box-shadow: inset 0px 2px 2px rgba(255, 255, 255, 0.4), inset 0px -4px 6px rgba(0, 0, 0, 0.3), 0px 10px 15px rgba(0, 0, 0, 0.5);

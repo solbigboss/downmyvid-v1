@@ -250,7 +250,10 @@ export const HeroInput: React.FC<HeroInputProps> = ({
             <div className="relative group">
               <button
                 type="button"
-                onClick={() => setSelectedPlatform('all')}
+                onClick={() => {
+                  setSelectedPlatform('all');
+                  inputRef.current?.focus();
+                }}
                 aria-label="All In One"
                 className={`icon-btn-3d btn-globe ${selectedPlatform === 'all' ? 'active' : ''}`}
               >
@@ -265,7 +268,10 @@ export const HeroInput: React.FC<HeroInputProps> = ({
             <div className="relative group">
               <button
                 type="button"
-                onClick={() => setSelectedPlatform('x')}
+                onClick={() => {
+                  setSelectedPlatform('x');
+                  inputRef.current?.focus();
+                }}
                 aria-label="Twitter / X"
                 className={`icon-btn-3d btn-xtwitter ${selectedPlatform === 'x' ? 'active' : ''}`}
               >
