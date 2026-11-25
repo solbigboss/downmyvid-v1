@@ -1,16 +1,29 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
   getDocs,
   query,
   where,
   serverTimestamp,
+  updateDoc,
+  writeBatch,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import { BlogComment, CreateCommentDTO, CommentStatus } from '../types';
 import { resolveApiUrl } from './mediaExtractor';
+import { BLOG_ADMIN_EMAIL } from '../data/blog';
 
 const commentsCollection = collection(db, 'comments');
+
+function requireAdminUser() {
+  const user = auth.currentUser;
+  if (!user || user.email?.toLowerCase() !== BLOG_ADMIN_EMAIL) {
+    throw new Error('Sign in with the blog administrator Google account to moderate comments.');
+  }
+  return user;
+}
 
 const SPAM_KEYWORDS = [
   'viagra', 'cialis', 'casino', 'poker', 'crypto giveaway',
@@ -241,4 +254,174 @@ export async function submitComment(
       ? 'Your comment has been submitted and is pending review.'
       : 'Comment posted successfully!',
   };
+}
+
+/**
+ * Admin: List all comments across all articles, optionally filtered by status.
+ * Tries backend API first, with full Firestore client fallback.
+ */
+export async function listAllCommentsForAdmin(statusFilter: CommentStatus | 'all' = 'all'): Promise<BlogComment[]> {
+  requireAdminUser();
+
+  const apiUrl = resolveApiUrl(`/api/admin/comments?status=${encodeURIComponent(statusFilter)}`);
+  try {
+    const res = await fetch(apiUrl, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.comments)) {
+        return data.comments;
+      }
+    }
+  } catch (apiErr) {
+    console.warn('Admin API /api/admin/comments unreachable, querying Firestore directly:', apiErr);
+  }
+
+  // Fallback to direct Firestore query
+  try {
+    const q = statusFilter === 'all'
+      ? commentsCollection
+      : query(commentsCollection, where('status', '==', statusFilter));
+
+    const snapshot = await getDocs(q);
+    const comments: BlogComment[] = snapshot.docs.map((docSnap) => {
+      const d = docSnap.data();
+      return {
+        id: docSnap.id,
+        post_slug: String(d.post_slug || ''),
+        parent_id: d.parent_id ? String(d.parent_id) : null,
+        guest_name: String(d.guest_name || 'Anonymous'),
+        content: String(d.content || ''),
+        status: (d.status as CommentStatus) || 'pending',
+        created_at: dateString(d.created_at || d.createdAt),
+      };
+    });
+
+    // Sort newest first
+    return comments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  } catch (err) {
+    console.error('Failed to query comments from Firestore for admin:', err);
+    throw new Error(err instanceof Error ? err.message : 'Could not load comments.');
+  }
+}
+
+/**
+ * Admin: Update status of a comment (e.g. 'approved', 'spam', 'rejected', 'pending').
+ */
+export async function updateCommentStatus(commentId: string, status: CommentStatus): Promise<void> {
+  requireAdminUser();
+  const cleanId = commentId.trim();
+
+  // Try API first
+  const apiUrl = resolveApiUrl(`/api/admin/comments/${encodeURIComponent(cleanId)}`);
+  try {
+    const res = await fetch(apiUrl, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (res.ok) return;
+  } catch (apiErr) {
+    console.warn('API PATCH /api/admin/comments/:id unreachable, updating Firestore directly:', apiErr);
+  }
+
+  // Fallback to direct Firestore update
+  try {
+    const commentRef = doc(db, 'comments', cleanId);
+    await updateDoc(commentRef, {
+      status,
+      updated_at: serverTimestamp(),
+    });
+  } catch (err) {
+    console.error('Failed to update comment status in Firestore:', err);
+    throw new Error(err instanceof Error ? err.message : 'Failed to update comment status.');
+  }
+}
+
+/**
+ * Admin: Permanently delete a comment and cascade-delete any child replies.
+ */
+export async function deleteComment(commentId: string): Promise<void> {
+  requireAdminUser();
+  const cleanId = commentId.trim();
+
+  // Try API first
+  const apiUrl = resolveApiUrl(`/api/admin/comments/${encodeURIComponent(cleanId)}`);
+  try {
+    const res = await fetch(apiUrl, {
+      method: 'DELETE',
+    });
+    if (res.ok) return;
+  } catch (apiErr) {
+    console.warn('API DELETE /api/admin/comments/:id unreachable, deleting via Firestore directly:', apiErr);
+  }
+
+  // Fallback to direct Firestore deletion
+  try {
+    const commentRef = doc(db, 'comments', cleanId);
+    await deleteDoc(commentRef);
+
+    // Also delete any child replies referencing this comment
+    const repliesQuery = query(commentsCollection, where('parent_id', '==', cleanId));
+    const replyDocs = await getDocs(repliesQuery);
+    if (!replyDocs.empty) {
+      const batch = writeBatch(db);
+      replyDocs.forEach((rSnap) => {
+        batch.delete(rSnap.ref);
+      });
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error('Failed to delete comment in Firestore:', err);
+    throw new Error(err instanceof Error ? err.message : 'Failed to delete comment.');
+  }
+}
+
+/**
+ * Admin: Ban all comments from a specific guest author name (marks them all as spam).
+ */
+export async function banCommentAuthor(guestName: string): Promise<number> {
+  requireAdminUser();
+  const cleanName = guestName.trim();
+  if (!cleanName || cleanName === 'Anonymous') {
+    throw new Error('Cannot ban default Anonymous author. Please ban or delete individual comments.');
+  }
+
+  // Try API first
+  const apiUrl = resolveApiUrl('/api/admin/comments/ban-author');
+  try {
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guest_name: cleanName }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.updatedCount || 0;
+    }
+  } catch (apiErr) {
+    console.warn('API POST ban-author unreachable, updating Firestore directly:', apiErr);
+  }
+
+  // Fallback to direct Firestore batch update
+  try {
+    const q = query(commentsCollection, where('guest_name', '==', cleanName));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return 0;
+
+    const batch = writeBatch(db);
+    snapshot.forEach((docSnap) => {
+      batch.update(docSnap.ref, {
+        status: 'spam',
+        updated_at: serverTimestamp(),
+      });
+    });
+    await batch.commit();
+    return snapshot.size;
+  } catch (err) {
+    console.error('Failed to ban author in Firestore:', err);
+    throw new Error(err instanceof Error ? err.message : 'Failed to ban author.');
+  }
 }

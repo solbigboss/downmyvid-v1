@@ -2632,6 +2632,104 @@ async function startServer() {
     });
   });
 
+  // Admin Comments Moderation Endpoints
+  // GET /api/admin/comments - List comments across all articles, filterable by status
+  app.get('/api/admin/comments', (req, res) => {
+    const statusFilter = String(req.query.status || 'all').trim();
+    const all = loadComments();
+
+    let filtered = all;
+    if (statusFilter && statusFilter !== 'all') {
+      filtered = all.filter((c) => c.status === statusFilter);
+    }
+
+    filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    res.json({
+      comments: filtered,
+      total_count: filtered.length,
+    });
+  });
+
+  // PATCH /api/admin/comments/:commentId - Update comment status (approved, spam, rejected, pending)
+  app.patch('/api/admin/comments/:commentId', (req, res) => {
+    const commentId = String(req.params.commentId).trim();
+    const { status } = req.body || {};
+
+    const validStatuses = ['approved', 'pending', 'rejected', 'spam'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+    }
+
+    const all = loadComments();
+    const index = all.findIndex((c) => c.id === commentId);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Comment not found.' });
+    }
+
+    all[index].status = status;
+    all[index].updated_at = new Date().toISOString();
+    saveComments(all);
+
+    res.json({
+      success: true,
+      comment: all[index],
+    });
+  });
+
+  // DELETE /api/admin/comments/:commentId - Permanently delete comment and cascade-delete child replies
+  app.delete('/api/admin/comments/:commentId', (req, res) => {
+    const commentId = String(req.params.commentId).trim();
+    const all = loadComments();
+
+    const target = all.find((c) => c.id === commentId);
+    if (!target) {
+      return res.status(404).json({ error: 'Comment not found.' });
+    }
+
+    // Cascade delete any replies referencing target commentId
+    const remaining = all.filter((c) => c.id !== commentId && c.parent_id !== commentId);
+    const deletedCount = all.length - remaining.length;
+    saveComments(remaining);
+
+    res.json({
+      success: true,
+      deleted_id: commentId,
+      deleted_count: deletedCount,
+    });
+  });
+
+  // POST /api/admin/comments/ban-author - Mark all comments from author as spam
+  app.post('/api/admin/comments/ban-author', (req, res) => {
+    const { guest_name } = req.body || {};
+    const cleanName = String(guest_name || '').trim();
+
+    if (!cleanName || cleanName === 'Anonymous') {
+      return res.status(400).json({ error: 'Cannot ban default Anonymous author.' });
+    }
+
+    const all = loadComments();
+    let updatedCount = 0;
+
+    for (const c of all) {
+      if (c.guest_name.toLowerCase() === cleanName.toLowerCase()) {
+        c.status = 'spam';
+        c.updated_at = new Date().toISOString();
+        updatedCount++;
+      }
+    }
+
+    if (updatedCount > 0) {
+      saveComments(all);
+    }
+
+    res.json({
+      success: true,
+      banned_author: cleanName,
+      updatedCount,
+    });
+  });
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', server: 'Downmyvid Full-Stack Backend' });
