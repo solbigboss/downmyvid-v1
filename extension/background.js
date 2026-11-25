@@ -160,6 +160,37 @@ async function extractTwitter(url) {
     console.warn('VxTwitter failed:', err.message);
   }
 
+  // Try tioo Twitter mirror fallback
+  try {
+    const tiooRes = await fetch(`https://backend1.tioo.eu.org/twitter?url=${encodeURIComponent(url)}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(9000),
+    });
+    if (tiooRes.ok) {
+      const btch = await tiooRes.json();
+      const urls = Array.isArray(btch?.url) ? btch.url : [];
+      const hd = urls.find((u) => u?.hd)?.hd;
+      const sd = urls.find((u) => u?.sd)?.sd;
+      const primary = hd || sd;
+      if (primary) {
+        const formats = [];
+        if (hd) formats.push({ id: 'tw_tioo_hd', label: '1080p / HD MP4', quality: 'HD MP4', format: 'MP4', type: 'video', directUrl: hd });
+        if (sd && sd !== hd) formats.push({ id: 'tw_tioo_sd', label: 'SD MP4', quality: 'SD MP4', format: 'MP4', type: 'video', directUrl: sd });
+        return {
+          id: `tw_${statusId}`,
+          originalUrl: url,
+          videoUrl: primary,
+          thumbnailUrl: '',
+          tweetText: btch.title || 'X / Twitter Video',
+          author: { name: 'X Creator', handle: 'x_user' },
+          formats,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('tioo Twitter fallback failed:', err.message);
+  }
+
   return null;
 }
 

@@ -1,7 +1,7 @@
 /**
- * DownMyVid Chrome Extension - Content Script
- * Injects 3D Download Buttons UNDER Video Players on YouTube, X (Twitter), Instagram, and Facebook.
- * No intrusive overlays, no video pausing on click.
+ * DownMyVid Chrome Extension - Content Script (v1.0.3)
+ * Precise Sub-Video & Action Bar Injections for YouTube, X (Twitter), Instagram, and Facebook.
+ * Native Reels vertical action sidebar + Horizontal timeline action rows.
  * Privacy-First: 0 trackers, 0 third-party redirects.
  */
 
@@ -23,7 +23,7 @@
     </svg>
   `;
 
-  // Active popup overlay reference
+  // Active modal overlay reference
   let currentPopupEl = null;
 
   function closePopup() {
@@ -31,6 +31,30 @@
       currentPopupEl.remove();
       currentPopupEl = null;
     }
+  }
+
+  /**
+   * Helper to attach robust click & pointer handlers that prevent host SPAs from hijacking clicks
+   */
+  function attachButtonEvents(btn, getParams) {
+    const trigger = (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+      try {
+        const { url, domMedia } = getParams();
+        handleDownloadClick(url, btn, domMedia);
+      } catch (err) {
+        console.warn('DownMyVid click error:', err);
+        handleDownloadClick(window.location.href, btn, null);
+      }
+    };
+
+    btn.addEventListener('click', trigger, true);
+    btn.addEventListener('pointerdown', (e) => e.stopPropagation(), true);
+    btn.addEventListener('mousedown', (e) => e.stopPropagation(), true);
   }
 
   /**
@@ -96,7 +120,7 @@
       `;
       popup.appendChild(errBox);
       overlay.appendChild(popup);
-      document.body.appendChild(overlay);
+      (document.body || document.documentElement).appendChild(overlay);
       currentPopupEl = overlay;
       return;
     }
@@ -172,7 +196,7 @@
 
     popup.appendChild(formatsList);
     overlay.appendChild(popup);
-    document.body.appendChild(overlay);
+    (document.body || document.documentElement).appendChild(overlay);
     currentPopupEl = overlay;
   }
 
@@ -193,45 +217,87 @@
     buttonEl.innerHTML = `<span class="dmv-spinner"></span><span>Loading...</span>`;
     buttonEl.style.pointerEvents = 'none';
 
-    chrome.runtime.sendMessage(
-      { action: 'EXTRACT_MEDIA', url: videoUrl, domMedia },
-      (response) => {
-        buttonEl.innerHTML = originalContent;
-        buttonEl.style.pointerEvents = '';
-
-        if (response && response.success && response.data) {
-          showQualityModal(videoUrl, response.data, null);
-        } else if (domMedia && domMedia.directUrl) {
-          // Instant direct stream from DOM if background API encountered issues
-          showQualityModal(videoUrl, {
-            originalUrl: videoUrl,
-            videoUrl: domMedia.directUrl,
-            thumbnailUrl: domMedia.poster || '',
-            tweetText: domMedia.title || 'Direct Video Stream',
-            author: { name: domMedia.author || 'Video' },
-            formats: [
-              {
-                id: 'dom_direct',
-                label: 'Direct HD MP4 (Active Stream)',
-                quality: '1080p / Direct',
-                format: 'MP4',
-                sizeMb: 12.0,
-                directUrl: domMedia.directUrl,
-              },
-            ],
-          }, null);
-        } else {
-          showQualityModal(videoUrl, null, response?.error || 'Extraction failed. Make sure the video is public.');
-        }
+    // Safety timeout in case background worker is restarting
+    const safetyTimeout = setTimeout(() => {
+      buttonEl.innerHTML = originalContent;
+      buttonEl.style.pointerEvents = '';
+      if (domMedia && domMedia.directUrl) {
+        showQualityModal(videoUrl, {
+          originalUrl: videoUrl,
+          videoUrl: domMedia.directUrl,
+          thumbnailUrl: domMedia.poster || '',
+          tweetText: domMedia.title || 'Direct Video Stream',
+          author: { name: domMedia.author || 'Video' },
+          formats: [
+            {
+              id: 'dom_direct',
+              label: 'Direct HD MP4 (Instant Stream)',
+              quality: '1080p / Direct',
+              format: 'MP4',
+              sizeMb: 12.0,
+              directUrl: domMedia.directUrl,
+            },
+          ],
+        }, null);
       }
-    );
+    }, 7000);
+
+    try {
+      chrome.runtime.sendMessage(
+        { action: 'EXTRACT_MEDIA', url: videoUrl, domMedia },
+        (response) => {
+          clearTimeout(safetyTimeout);
+          buttonEl.innerHTML = originalContent;
+          buttonEl.style.pointerEvents = '';
+
+          if (response && response.success && response.data) {
+            showQualityModal(videoUrl, response.data, null);
+          } else if (domMedia && domMedia.directUrl) {
+            showQualityModal(videoUrl, {
+              originalUrl: videoUrl,
+              videoUrl: domMedia.directUrl,
+              thumbnailUrl: domMedia.poster || '',
+              tweetText: domMedia.title || 'Direct Video Stream',
+              author: { name: domMedia.author || 'Video' },
+              formats: [
+                {
+                  id: 'dom_direct',
+                  label: 'Direct HD MP4 (Instant Stream)',
+                  quality: '1080p / Direct',
+                  format: 'MP4',
+                  sizeMb: 12.0,
+                  directUrl: domMedia.directUrl,
+                },
+              ],
+            }, null);
+          } else {
+            showQualityModal(videoUrl, null, response?.error || 'Extraction failed. Make sure the video is public.');
+          }
+        }
+      );
+    } catch (err) {
+      clearTimeout(safetyTimeout);
+      buttonEl.innerHTML = originalContent;
+      buttonEl.style.pointerEvents = '';
+      if (domMedia && domMedia.directUrl) {
+        showQualityModal(videoUrl, {
+          originalUrl: videoUrl,
+          videoUrl: domMedia.directUrl,
+          thumbnailUrl: domMedia.poster || '',
+          tweetText: domMedia.title || 'Direct Video Stream',
+          author: { name: domMedia.author || 'Video' },
+          formats: [{ id: 'dom_direct', label: 'Direct HD MP4', quality: '1080p', format: 'MP4', directUrl: domMedia.directUrl }],
+        }, null);
+      } else {
+        showQualityModal(videoUrl, null, 'Please refresh this tab to reload the extension.');
+      }
+    }
   }
 
   // =========================================================================
-  // 1. YOUTUBE INJECTOR (Under the video in the action bar)
+  // 1. YOUTUBE INJECTOR (In Action Bar)
   // =========================================================================
   function injectYouTube() {
-    // Watch Page Action Bar (Right below the video title/player)
     const watchActions = document.querySelector(
       'ytd-watch-metadata #actions #top-level-buttons-computed, #menu-container #top-level-buttons-computed'
     );
@@ -245,17 +311,12 @@
       btn.setAttribute('title', 'Download video with DownMyVid');
       btn.innerHTML = `${LOGO_ICON_HTML}<span>DownMyVid</span>`;
 
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        handleDownloadClick(window.location.href, btn, null);
-      }, true);
+      attachButtonEvents(btn, () => ({ url: window.location.href, domMedia: null }));
 
       wrap.appendChild(btn);
       watchActions.appendChild(wrap);
     }
 
-    // Shorts Page Action Column (Right beside the Short)
     const shortsActions = document.querySelectorAll(
       'ytd-reel-player-overlay-renderer #actions, ytd-reel-video-renderer[is-active] #actions'
     );
@@ -270,11 +331,7 @@
         btn.setAttribute('title', 'Download Short with DownMyVid');
         btn.innerHTML = `${LOGO_ICON_HTML}<span>Save</span>`;
 
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          handleDownloadClick(window.location.href, btn, null);
-        }, true);
+        attachButtonEvents(btn, () => ({ url: window.location.href, domMedia: null }));
 
         wrap.appendChild(btn);
         actions.appendChild(wrap);
@@ -283,7 +340,7 @@
   }
 
   // =========================================================================
-  // 2. X / TWITTER INJECTOR (Directly UNDER the video in the action bar)
+  // 2. X / TWITTER INJECTOR (Sub-Video Bar & Action Row)
   // =========================================================================
   function resolveTweetUrl(container) {
     if (!container) return null;
@@ -305,7 +362,7 @@
     }
 
     let parent = container.parentElement;
-    for (let depth = 0; depth < 6 && parent; depth++) {
+    for (let depth = 0; depth < 8 && parent; depth++) {
       const parentLink = parent.querySelector('time')?.closest('a') || parent.querySelector('a[href*="/status/"]');
       if (parentLink && parentLink.getAttribute('href')?.includes('/status/')) {
         return `https://x.com${parentLink.getAttribute('href').split('?')[0]}`;
@@ -317,8 +374,7 @@
   }
 
   function injectX() {
-    // Strategy 1: Find all videos on X and inject into the action bar UNDER the video
-    const videos = document.querySelectorAll('video, [data-testid="videoPlayer"], [data-testid="videoComponent"]');
+    const videos = document.querySelectorAll('video');
 
     videos.forEach((vidEl) => {
       const tweet = vidEl.closest('article[data-testid="tweet"]') || 
@@ -328,7 +384,28 @@
                     vidEl.parentElement?.parentElement?.parentElement;
       if (!tweet) return;
 
-      // Locate the action bar UNDER the video (div[role="group"])
+      const mediaContainer = vidEl.closest('[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="videoComponent"], [aria-label*="video" i]') || vidEl.parentElement;
+
+      // 1. Dedicated Sub-Video Bar: directly beneath the video player
+      if (mediaContainer && mediaContainer.parentElement && !mediaContainer.parentElement.querySelector('.dmv-under-video-bar')) {
+        const subBar = document.createElement('div');
+        subBar.className = 'dmv-under-video-bar';
+
+        const subBtn = document.createElement('button');
+        subBtn.className = 'dmv-btn-under-video';
+        subBtn.setAttribute('type', 'button');
+        subBtn.innerHTML = `${LOGO_ICON_HTML}<span>Download Video (DownMyVid)</span>`;
+
+        attachButtonEvents(subBtn, () => ({
+          url: resolveTweetUrl(tweet) || window.location.href,
+          domMedia: findDirectVideoInfo(tweet || vidEl),
+        }));
+
+        subBar.appendChild(subBtn);
+        mediaContainer.after(subBar);
+      }
+
+      // 2. Action row under the video (div[role="group"])
       const actionBar = tweet.querySelector('div[role="group"]');
       if (actionBar && !actionBar.querySelector('.dmv-x-btn')) {
         const wrap = document.createElement('div');
@@ -340,19 +417,13 @@
         btn.setAttribute('title', 'Download video with DownMyVid');
         btn.innerHTML = `${LOGO_ICON_HTML}<span>Save</span>`;
 
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-
-          const domMedia = findDirectVideoInfo(tweet);
-          const tweetUrl = resolveTweetUrl(tweet) || window.location.href;
-          handleDownloadClick(tweetUrl, btn, domMedia);
-        }, true);
+        attachButtonEvents(btn, () => ({
+          url: resolveTweetUrl(tweet) || window.location.href,
+          domMedia: findDirectVideoInfo(tweet),
+        }));
 
         wrap.appendChild(btn);
 
-        // Place into the action bar next to Bookmark/Share
         const bookmarkOrShare = actionBar.querySelector('[data-testid="bookmark"], [data-testid="share"], [aria-label*="Share" i]');
         if (bookmarkOrShare && bookmarkOrShare.parentElement && bookmarkOrShare.parentElement.parentElement === actionBar) {
           actionBar.insertBefore(wrap, bookmarkOrShare.parentElement);
@@ -360,68 +431,11 @@
           actionBar.appendChild(wrap);
         }
       }
-
-      // Strategy 1B: If no action bar exists (theatre/modal), insert directly below media container
-      const mediaContainer = vidEl.closest('[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="videoComponent"]') || vidEl.parentElement;
-      if (mediaContainer && mediaContainer.parentElement && !mediaContainer.parentElement.querySelector('.dmv-under-video-bar') && !actionBar) {
-        const subBar = document.createElement('div');
-        subBar.className = 'dmv-under-video-bar';
-
-        const subBtn = document.createElement('button');
-        subBtn.className = 'dmv-btn-under-video';
-        subBtn.innerHTML = `${LOGO_ICON_HTML}<span>Download Video</span>`;
-
-        subBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-
-          const domMedia = findDirectVideoInfo(tweet || vidEl);
-          const tweetUrl = resolveTweetUrl(tweet || vidEl) || window.location.href;
-          handleDownloadClick(tweetUrl, subBtn, domMedia);
-        }, true);
-
-        subBar.appendChild(subBtn);
-        mediaContainer.after(subBar);
-      }
-    });
-
-    // Strategy 2: Scan all tweet articles that contain video indicators
-    const allTweets = document.querySelectorAll('article[data-testid="tweet"]');
-    allTweets.forEach((tweet) => {
-      if (tweet.querySelector('.dmv-x-btn')) return;
-      const hasMedia = tweet.querySelector('video, [data-testid="videoPlayer"], [data-testid="videoComponent"], [aria-label*="video" i], [data-testid="playButton"]');
-      if (!hasMedia) return;
-
-      const actionBar = tweet.querySelector('div[role="group"]');
-      if (!actionBar || actionBar.querySelector('.dmv-x-btn')) return;
-
-      const wrap = document.createElement('div');
-      wrap.className = 'dmv-x-wrapper';
-
-      const btn = document.createElement('button');
-      btn.className = 'dmv-btn dmv-btn-compact dmv-x-btn';
-      btn.setAttribute('type', 'button');
-      btn.setAttribute('title', 'Download video with DownMyVid');
-      btn.innerHTML = `${LOGO_ICON_HTML}<span>Save</span>`;
-
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-
-        const domMedia = findDirectVideoInfo(tweet);
-        const tweetUrl = resolveTweetUrl(tweet) || window.location.href;
-        handleDownloadClick(tweetUrl, btn, domMedia);
-      }, true);
-
-      wrap.appendChild(btn);
-      actionBar.appendChild(wrap);
     });
   }
 
   // =========================================================================
-  // 3. INSTAGRAM INJECTOR (Directly UNDER the video, NEVER inside)
+  // 3. INSTAGRAM INJECTOR (Reels Sidebar & Feed Post Action Bar)
   // =========================================================================
   function injectInstagram() {
     const videos = document.querySelectorAll('video');
@@ -430,30 +444,10 @@
       const container = vid.closest('article') || 
                         vid.closest('div[role="dialog"]') || 
                         vid.closest('div[role="presentation"]') || 
-                        vid.parentElement?.parentElement;
+                        vid.parentElement?.parentElement?.parentElement;
       if (!container) return;
 
-      if (container.querySelector('.dmv-ig-btn')) return;
-
-      // Find the action bar directly UNDER the video (Like, Comment, Share row)
-      const actionBar = container.querySelector('section, div[role="presentation"] > div, div[role="group"]');
-      if (!actionBar) return;
-
-      const wrap = document.createElement('div');
-      wrap.className = 'dmv-ig-wrapper';
-
-      const btn = document.createElement('button');
-      btn.className = 'dmv-btn dmv-btn-compact dmv-ig-btn';
-      btn.setAttribute('type', 'button');
-      btn.setAttribute('title', 'Download video with DownMyVid');
-      btn.innerHTML = `${LOGO_ICON_HTML}<span>DownMyVid</span>`;
-
-      // Crucial: capture: true + stopImmediatePropagation prevents Instagram from pausing the video
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-
+      const getIgParams = () => {
         const directSrc = vid.currentSrc || vid.src || '';
         const domMedia = {
           directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
@@ -462,32 +456,79 @@
           title: container.querySelector('h1, span')?.textContent?.trim().slice(0, 100) || 'Instagram Video',
         };
 
-        const linkEl = container.querySelector('a[href*="/reel/"], a[href*="/p/"]');
+        const linkEl = container.querySelector('a[href*="/reel/"], a[href*="/p/"]') || document.querySelector('a[href*="/reel/"]');
         let postUrl = linkEl ? `https://www.instagram.com${linkEl.getAttribute('href').split('?')[0]}` : null;
         if (!postUrl && (window.location.pathname.includes('/reel/') || window.location.pathname.includes('/p/'))) {
           postUrl = `https://www.instagram.com${window.location.pathname.split('?')[0]}`;
         }
-        if (!postUrl) {
-          postUrl = window.location.href;
+        return { url: postUrl || window.location.href, domMedia };
+      };
+
+      // Strategy A: Reels Vertical Action Column (Right side of the video)
+      const shareIcon = container.querySelector('svg[aria-label="Share Post"], svg[aria-label="Direct"], svg[aria-label="Share"]');
+      const commentIcon = container.querySelector('svg[aria-label="Comment"]');
+      const likeIcon = container.querySelector('svg[aria-label="Like"], svg[aria-label="Unlike"]');
+      const targetIcon = shareIcon || commentIcon || likeIcon;
+
+      if (targetIcon) {
+        const actionBtnWrapper = targetIcon.closest('div[role="button"]') || targetIcon.closest('button') || targetIcon.parentElement;
+        const columnParent = actionBtnWrapper?.parentElement;
+
+        if (columnParent && !columnParent.querySelector('.dmv-reel-action') && !columnParent.querySelector('.dmv-ig-btn')) {
+          const reelAction = document.createElement('div');
+          reelAction.className = 'dmv-reel-action';
+
+          const reelBtn = document.createElement('button');
+          reelBtn.className = 'dmv-btn-reel';
+          reelBtn.setAttribute('type', 'button');
+          reelBtn.setAttribute('title', 'Download with DownMyVid');
+          reelBtn.innerHTML = `<img src="${LOGO_HEADER_URL}" alt="DownMyVid" />`;
+
+          const label = document.createElement('span');
+          label.className = 'dmv-reel-label';
+          label.textContent = 'Save';
+
+          attachButtonEvents(reelBtn, getIgParams);
+
+          reelAction.appendChild(reelBtn);
+          reelAction.appendChild(label);
+
+          if (actionBtnWrapper.nextSibling) {
+            columnParent.insertBefore(reelAction, actionBtnWrapper.nextSibling);
+          } else {
+            columnParent.appendChild(reelAction);
+          }
         }
+      }
 
-        handleDownloadClick(postUrl, btn, domMedia);
-      }, true);
+      // Strategy B: Feed Post Horizontal Action Bar (Under the video)
+      const actionBar = container.querySelector('section, div[role="presentation"] > div');
+      if (actionBar && !actionBar.querySelector('.dmv-ig-btn') && !actionBar.querySelector('.dmv-reel-action')) {
+        const wrap = document.createElement('div');
+        wrap.className = 'dmv-ig-wrapper';
 
-      wrap.appendChild(btn);
+        const btn = document.createElement('button');
+        btn.className = 'dmv-btn dmv-btn-compact dmv-ig-btn';
+        btn.setAttribute('type', 'button');
+        btn.setAttribute('title', 'Download video with DownMyVid');
+        btn.innerHTML = `${LOGO_ICON_HTML}<span>DownMyVid</span>`;
 
-      // Insert next to Bookmark or in the action bar row
-      const bookmarkBtn = actionBar.querySelector('svg[aria-label*="Save" i], svg[aria-label*="Bookmark" i]')?.closest('div, button');
-      if (bookmarkBtn && bookmarkBtn.parentElement === actionBar) {
-        actionBar.insertBefore(wrap, bookmarkBtn);
-      } else {
-        actionBar.appendChild(wrap);
+        attachButtonEvents(btn, getIgParams);
+
+        wrap.appendChild(btn);
+
+        const bookmarkBtn = actionBar.querySelector('svg[aria-label*="Save" i], svg[aria-label*="Bookmark" i]')?.closest('div, button');
+        if (bookmarkBtn && bookmarkBtn.parentElement === actionBar) {
+          actionBar.insertBefore(wrap, bookmarkBtn);
+        } else {
+          actionBar.appendChild(wrap);
+        }
       }
     });
   }
 
   // =========================================================================
-  // 4. FACEBOOK INJECTOR (Directly UNDER the video in the toolbar)
+  // 4. FACEBOOK INJECTOR (Reels Sidebar & Feed Post Action Bar)
   // =========================================================================
   function injectFacebook() {
     const videos = document.querySelectorAll('video');
@@ -500,14 +541,58 @@
                    vid.parentElement?.parentElement?.parentElement;
       if (!post) return;
 
-      if (post.querySelector('.dmv-fb-btn')) return;
+      const getFbParams = () => {
+        const directSrc = vid.currentSrc || vid.src || '';
+        const domMedia = {
+          directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
+          poster: vid.getAttribute('poster') || '',
+          author: post.querySelector('h2, h3, h4, strong, a[role="link"]')?.textContent?.trim() || 'Facebook Creator',
+          title: post.querySelector('div[data-ad-preview="message"], div[dir="auto"]')?.textContent?.trim().slice(0, 100) || 'Facebook Video',
+        };
 
-      // Find the action bar under the video: toolbar containing Like/Comment/Share
-      const actionBar = post.querySelector('div[role="toolbar"], div[role="group"]');
-      const likeBtn = post.querySelector('div[aria-label*="Like" i], div[aria-label*="J’aime" i], div[aria-label*="Me gusta" i], div[aria-label*="إعجاب" i]');
-      const targetBar = actionBar || likeBtn?.parentElement?.parentElement || post.querySelector('div[role="group"]');
+        const link = post.querySelector('a[href*="/videos/"], a[href*="/watch/"], a[href*="/reel/"]');
+        let fbUrl = link
+          ? (link.href.startsWith('http') ? link.href.split('?')[0] : `https://www.facebook.com${link.getAttribute('href').split('?')[0]}`)
+          : window.location.href;
 
-      if (targetBar && !targetBar.querySelector('.dmv-fb-btn')) {
+        return { url: fbUrl, domMedia };
+      };
+
+      // Strategy A: Facebook Reels / Watch Vertical Action Column (Right side)
+      const shareBtn = post.querySelector('div[aria-label*="Share" i], div[aria-label*="Partager" i], div[aria-label*="مشاركة" i]');
+      const commentBtn = post.querySelector('div[aria-label*="Comment" i], div[aria-label*="Commenter" i], div[aria-label*="تعليق" i]');
+      const likeBtn = post.querySelector('div[aria-label*="Like" i], div[aria-label*="J’aime" i], div[aria-label*="إعجاب" i]');
+      const targetAction = shareBtn || commentBtn || likeBtn;
+
+      // Check if this is a Reel vertical sidebar layout
+      const isReelLayout = targetAction && targetAction.closest('div[class*="xurb0ha"], div[role="presentation"], div[class*="x1n2onr6"]');
+      if (isReelLayout && !post.querySelector('.dmv-reel-action')) {
+        const column = targetAction.parentElement?.parentElement;
+        if (column && !column.querySelector('.dmv-reel-action')) {
+          const reelAction = document.createElement('div');
+          reelAction.className = 'dmv-reel-action';
+
+          const reelBtn = document.createElement('button');
+          reelBtn.className = 'dmv-btn-reel';
+          reelBtn.setAttribute('type', 'button');
+          reelBtn.setAttribute('title', 'Download Reel with DownMyVid');
+          reelBtn.innerHTML = `<img src="${LOGO_HEADER_URL}" alt="DownMyVid" />`;
+
+          const label = document.createElement('span');
+          label.className = 'dmv-reel-label';
+          label.textContent = 'Save';
+
+          attachButtonEvents(reelBtn, getFbParams);
+
+          reelAction.appendChild(reelBtn);
+          reelAction.appendChild(label);
+          column.appendChild(reelAction);
+        }
+      }
+
+      // Strategy B: Facebook Feed Posts Horizontal Toolbar (Directly under the video)
+      const toolbar = post.querySelector('div[role="toolbar"]');
+      if (toolbar && !toolbar.querySelector('.dmv-fb-btn')) {
         const wrap = document.createElement('div');
         wrap.className = 'dmv-fb-wrapper';
 
@@ -517,59 +602,10 @@
         btn.setAttribute('title', 'Download video with DownMyVid');
         btn.innerHTML = `${LOGO_ICON_HTML}<span>DownMyVid</span>`;
 
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-
-          const directSrc = vid.currentSrc || vid.src || '';
-          const domMedia = {
-            directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
-            poster: vid.getAttribute('poster') || '',
-            author: post.querySelector('h2, h3, h4, strong, a[role="link"]')?.textContent?.trim() || 'Facebook Creator',
-            title: post.querySelector('div[data-ad-preview="message"], div[dir="auto"]')?.textContent?.trim().slice(0, 100) || 'Facebook Video',
-          };
-
-          const link = post.querySelector('a[href*="/videos/"], a[href*="/watch/"], a[href*="/reel/"]');
-          let fbUrl = link
-            ? (link.href.startsWith('http') ? link.href.split('?')[0] : `https://www.facebook.com${link.getAttribute('href').split('?')[0]}`)
-            : window.location.href;
-
-          handleDownloadClick(fbUrl, btn, domMedia);
-        }, true);
+        attachButtonEvents(btn, getFbParams);
 
         wrap.appendChild(btn);
-        targetBar.appendChild(wrap);
-      } else {
-        // Fallback: place directly beneath the video wrapper
-        const videoWrapper = vid.parentElement;
-        if (videoWrapper && videoWrapper.parentElement && !videoWrapper.parentElement.querySelector('.dmv-under-video-bar')) {
-          const subBar = document.createElement('div');
-          subBar.className = 'dmv-under-video-bar';
-
-          const subBtn = document.createElement('button');
-          subBtn.className = 'dmv-btn-under-video';
-          subBtn.innerHTML = `${LOGO_ICON_HTML}<span>Download Video</span>`;
-
-          subBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-
-            const directSrc = vid.currentSrc || vid.src || '';
-            const domMedia = {
-              directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
-              poster: vid.getAttribute('poster') || '',
-              author: 'Facebook Creator',
-              title: 'Facebook Video',
-            };
-
-            handleDownloadClick(window.location.href, subBtn, domMedia);
-          }, true);
-
-          subBar.appendChild(subBtn);
-          videoWrapper.after(subBar);
-        }
+        toolbar.appendChild(wrap);
       }
     });
   }
@@ -584,9 +620,9 @@
     if (IS_FACEBOOK) injectFacebook();
   }
 
-  // Initial scan & periodic scan for dynamic feed scrolling
+  // Run initial scan & continuous polling for dynamic scrolling feeds
   scanAndInject();
-  setInterval(scanAndInject, 1000);
+  setInterval(scanAndInject, 800);
 
   // MutationObserver with 200ms debounce
   let debounceTimer = null;
@@ -600,8 +636,7 @@
     subtree: true,
   });
 
-  // Re-check on URL pushState / history changes
-  window.addEventListener('popstate', () => setTimeout(scanAndInject, 300));
+  window.addEventListener('popstate', () => setTimeout(scanAndInject, 250));
 
   // =========================================================================
   // MESSAGE LISTENER (FOR POPUP QUERYING THE ACTIVE VIDEO)
@@ -610,7 +645,6 @@
     if (message.action === 'GET_ACTIVE_VIDEO') {
       const videos = Array.from(document.querySelectorAll('video'));
 
-      // Find currently playing video, or one visible in viewport
       let activeVid = videos.find((v) => !v.paused && !v.ended && v.currentTime > 0);
       if (!activeVid && videos.length > 0) {
         const centerY = window.innerHeight / 2;
