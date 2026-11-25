@@ -30,8 +30,8 @@ declare global {
   }
 }
 
-// Cloudflare official test key that always passes in development / staging
-const DUMMY_TEST_SITE_KEY = '1x00000000000000000000AA';
+// Cloudflare Turnstile Site Key for DownMyVid
+const PRODUCTION_TURNSTILE_SITE_KEY = '0x4AAAAAAGS0n5MhtxDZgn9T';
 
 export const TurnstileWidget: React.FC<TurnstileWidgetProps> = ({
   onVerify,
@@ -47,7 +47,7 @@ export const TurnstileWidget: React.FC<TurnstileWidgetProps> = ({
 
   const siteKey =
     ((import.meta as any).env?.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() ||
-    DUMMY_TEST_SITE_KEY;
+    PRODUCTION_TURNSTILE_SITE_KEY;
 
   useEffect(() => {
     let isMounted = true;
