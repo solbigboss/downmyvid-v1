@@ -125,7 +125,8 @@ export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin');
     const allowed = (env.ALLOWED_ORIGINS || originsDefault).split(',').map(v => v.trim());
-    if (origin && !allowed.includes(origin)) return json({ error: 'Origin not allowed.' }, 403);
+    const isAllowedOrigin = (orig) => !orig || orig.startsWith('chrome-extension://') || allowed.includes(orig);
+    if (origin && !isAllowedOrigin(origin)) return json({ error: 'Origin not allowed.' }, 403);
     let response;
     if (request.method === 'OPTIONS') response = new Response(null, { status: 204 });
     else try { response = await route(request, env); } catch (error) {

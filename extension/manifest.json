@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "DownMyVid - 3D Video Downloader",
-  "version": "1.0.0",
-  "description": "Frictionless, 3D-styled video downloader for YouTube, X (Twitter), and Instagram.",
+  "version": "1.0.1",
+  "description": "Frictionless, 3D-styled video downloader for YouTube, X (Twitter), Instagram, and TikTok.",
   "permissions": [
     "storage",
     "activeTab",
@@ -14,9 +14,14 @@
     "*://*.x.com/*",
     "*://*.twitter.com/*",
     "*://*.instagram.com/*",
+    "*://*.tiktok.com/*",
     "https://downmyvid.com/*",
     "https://*.downmyvid.com/*",
-    "https://downmyvid-meta-api.saddikos97.workers.dev/*"
+    "https://downmyvid-meta-api.saddikos97.workers.dev/*",
+    "https://api.fxtwitter.com/*",
+    "https://api.vxtwitter.com/*",
+    "https://backend1.tioo.eu.org/*",
+    "https://www.tikwm.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -28,7 +33,8 @@
         "*://*.youtube.com/*",
         "*://*.x.com/*",
         "*://*.twitter.com/*",
-        "*://*.instagram.com/*"
+        "*://*.instagram.com/*",
+        "*://*.tiktok.com/*"
       ],
       "js": ["content.js"],
       "css": ["styles.css"],
