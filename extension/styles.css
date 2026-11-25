@@ -1,6 +1,7 @@
 /**
  * DownMyVid Chrome Extension Styles
  * Signature 3D Glassmorphism & Cyberpunk Neon Design
+ * Clean Action Bar & Sub-Video Placement
  */
 
 /* Injected 3D Action Button */
@@ -30,6 +31,7 @@
   z-index: 100 !important;
   position: relative !important;
   outline: none !important;
+  text-decoration: none !important;
 }
 
 .dmv-btn:hover {
@@ -64,62 +66,53 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
 }
 
-/* Compact button for Twitter timelines and Instagram rows */
+/* Compact button for action bars directly under videos */
 .dmv-btn-compact {
-  padding: 6px 10px !important;
+  padding: 6px 12px !important;
   font-size: 12px !important;
   border-radius: 10px !important;
 }
 
-/* Floating 3D Player Badge (Always accessible on video players) */
-.dmv-player-badge {
-  position: absolute !important;
-  top: 14px !important;
-  right: 14px !important;
-  z-index: 99999 !important;
+/* Dedicated Sub-Video Bar (clean placement right below video containers) */
+.dmv-under-video-bar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  padding: 6px 4px 8px !important;
+  box-sizing: border-box !important;
+  z-index: 10 !important;
+  position: relative !important;
+  clear: both !important;
+}
+
+.dmv-btn-under-video {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 6px !important;
-  padding: 7px 12px !important;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  gap: 7px !important;
+  padding: 7px 14px !important;
   font-size: 12px !important;
   font-weight: 700 !important;
-  color: #00f2fe !important;
-  background: rgba(11, 17, 30, 0.85) !important;
-  backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(0, 242, 254, 0.45) !important;
   border-radius: 10px !important;
-  box-shadow:
-    0px 4px 15px rgba(0, 0, 0, 0.6),
-    0px 0px 10px rgba(0, 242, 254, 0.25),
-    inset 0px 1px 1px rgba(255, 255, 255, 0.2) !important;
+  background: linear-gradient(180deg, #1e293b, #0f172a) !important;
+  color: #00f2fe !important;
+  border: 1px solid rgba(0, 242, 254, 0.4) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
   cursor: pointer !important;
-  opacity: 0.85 !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: all 0.15s ease !important;
   user-select: none !important;
-  text-decoration: none !important;
-  pointer-events: auto !important;
 }
 
-.dmv-player-badge:hover {
-  opacity: 1 !important;
-  transform: translateY(-2px) scale(1.04) !important;
-  border-color: #00f2fe !important;
-  background: rgba(15, 23, 42, 0.95) !important;
-  box-shadow:
-    0px 6px 20px rgba(0, 0, 0, 0.7),
-    0px 0px 18px rgba(0, 242, 254, 0.45),
-    inset 0px 1px 1px rgba(255, 255, 255, 0.3) !important;
+.dmv-btn-under-video:hover {
+  background: linear-gradient(180deg, #3bb3ff, #007bff) !important;
+  color: #ffffff !important;
+  border-color: #3bb3ff !important;
+  box-shadow: 0 4px 14px rgba(0, 123, 255, 0.5) !important;
+  transform: translateY(-1px) !important;
 }
 
-.dmv-player-badge:active {
-  transform: scale(0.96) translateY(0px) !important;
-}
-
-.dmv-player-badge svg {
-  width: 14px !important;
-  height: 14px !important;
-  fill: currentColor !important;
+.dmv-btn-under-video:active {
+  transform: scale(0.96) !important;
 }
 
 /* YouTube Specific Container Placement */
@@ -129,23 +122,37 @@
   margin-left: 8px !important;
   margin-right: 8px !important;
   vertical-align: middle !important;
+  flex-shrink: 0 !important;
 }
 
 /* X / Twitter Specific Placement */
 .dmv-x-wrapper {
   display: inline-flex !important;
   align-items: center !important;
-  margin-left: 6px !important;
-  margin-right: 6px !important;
+  margin: 0 4px !important;
   vertical-align: middle !important;
+  flex-shrink: 0 !important;
+  z-index: 10 !important;
 }
 
-/* Instagram Specific Placement */
+/* Instagram Specific Placement (Beneath the video, never inside!) */
 .dmv-ig-wrapper {
   display: inline-flex !important;
   align-items: center !important;
-  margin: 4px 6px !important;
+  margin: 4px 8px !important;
   vertical-align: middle !important;
+  flex-shrink: 0 !important;
+  z-index: 10 !important;
+}
+
+/* Facebook Specific Placement (Beneath the video, in action toolbar) */
+.dmv-fb-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin: 4px 8px !important;
+  vertical-align: middle !important;
+  flex-shrink: 0 !important;
+  z-index: 10 !important;
 }
 
 /* Floating 3D Quality Dropdown Modal */

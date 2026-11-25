@@ -28,6 +28,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (host.includes('tiktok.com')) {
         return !path.includes('/video/');
       }
+      if (host.includes('facebook.com') || host.includes('fb.watch') || host.includes('fb.com')) {
+        return !path.includes('/videos/') && !path.includes('/watch') && !path.includes('/reel/') && !path.includes('/posts/');
+      }
       if (host.includes('youtube.com')) {
         return !path.includes('/watch') && !path.includes('/shorts');
       }

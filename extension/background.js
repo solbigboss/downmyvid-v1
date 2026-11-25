@@ -286,7 +286,70 @@ async function extractInstagramMirror(url) {
 }
 
 /**
- * 4. Extract via DownMyVid Cloudflare Worker API
+ * 4. Extract Facebook via Tioo mirror
+ */
+async function extractFacebook(url) {
+  const workerRes = await extractViaWorker(url);
+  if (workerRes) return workerRes;
+
+  try {
+    const res = await fetch(`https://backend1.tioo.eu.org/fbdown?url=${encodeURIComponent(url)}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const hd = data?.HD || data?.hd || data?.data?.hd;
+      const sd = data?.Normal_video || data?.sd || data?.data?.sd;
+      const primary = hd || sd;
+
+      if (primary) {
+        const formats = [];
+        if (hd) {
+          formats.push({
+            id: 'fb_hd',
+            label: '1080p / HD MP4',
+            quality: 'HD MP4',
+            format: 'MP4',
+            type: 'video',
+            directUrl: hd,
+          });
+        }
+        if (sd && sd !== hd) {
+          formats.push({
+            id: 'fb_sd',
+            label: 'SD MP4',
+            quality: 'SD MP4',
+            format: 'MP4',
+            type: 'video',
+            directUrl: sd,
+          });
+        }
+
+        return {
+          id: `fb_${Date.now()}`,
+          originalUrl: url,
+          videoUrl: primary,
+          thumbnailUrl: data?.thumbnail || '',
+          tweetText: data?.title || 'Facebook Video',
+          author: {
+            name: 'Facebook Creator',
+            handle: 'facebook_user',
+          },
+          formats,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Facebook mirror failed:', err.message);
+  }
+
+  return null;
+}
+
+/**
+ * 5. Extract via DownMyVid Cloudflare Worker API
  */
 async function extractViaWorker(url) {
   try {
@@ -334,6 +397,8 @@ async function extractMedia(videoUrl, domMedia) {
     if (!result) {
       result = await extractInstagramMirror(videoUrl);
     }
+  } else if (lowerUrl.includes('facebook.com') || lowerUrl.includes('fb.watch') || lowerUrl.includes('fb.com')) {
+    result = await extractFacebook(videoUrl);
   } else {
     // YouTube / other
     result = await extractViaWorker(videoUrl);

@@ -1,7 +1,7 @@
 /**
  * DownMyVid Chrome Extension - Content Script
- * Monitors YouTube, X (Twitter), Instagram, and TikTok DOM to inject 3D download buttons.
- * Instant Direct DOM Extraction + Background Service Worker Bridge.
+ * Injects 3D Download Buttons UNDER Video Players on YouTube, X (Twitter), Instagram, and Facebook.
+ * No intrusive overlays, no video pausing on click.
  * Privacy-First: 0 trackers, 0 third-party redirects.
  */
 
@@ -10,6 +10,7 @@
   const IS_YOUTUBE = HOSTNAME.includes('youtube.com');
   const IS_X = HOSTNAME.includes('x.com') || HOSTNAME.includes('twitter.com');
   const IS_INSTAGRAM = HOSTNAME.includes('instagram.com');
+  const IS_FACEBOOK = HOSTNAME.includes('facebook.com') || HOSTNAME.includes('fb.com') || HOSTNAME.includes('fb.watch');
   const IS_TIKTOK = HOSTNAME.includes('tiktok.com');
 
   const LOGO_ICON_URL = chrome.runtime.getURL('icons/icon16.png');
@@ -33,21 +34,22 @@
   }
 
   /**
-   * Extract direct media stream, poster, and metadata directly from a container's <video> element
+   * Extract direct media stream, poster, and metadata from a container's <video> element
    */
   function findDirectVideoInfo(container) {
+    if (!container) return null;
     const video = container.querySelector('video') || (container.tagName === 'VIDEO' ? container : null);
     if (!video) return null;
 
     const directSrc = video.currentSrc || video.src || video.querySelector('source')?.src || '';
     const poster = video.getAttribute('poster') || container.querySelector('img')?.src || '';
-    const authorEl = container.querySelector('a[href*="/"], header a, [data-testid="User-Name"]');
-    const author = authorEl?.textContent?.trim() || 'Video';
-    const textEl = container.querySelector('[data-testid="tweetText"], h1, span, p');
+    const authorEl = container.querySelector('a[href*="/"], header a, [data-testid="User-Name"], h2, h3, h4, strong');
+    const author = authorEl?.textContent?.trim() || 'Video Creator';
+    const textEl = container.querySelector('[data-testid="tweetText"], div[data-ad-preview="message"], div[dir="auto"], h1, span, p');
     const title = textEl?.textContent?.trim().slice(0, 120) || 'Video Stream';
 
     return {
-      directUrl: directSrc.startsWith('http') ? directSrc : null,
+      directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
       poster: poster.startsWith('http') ? poster : null,
       author,
       title,
@@ -69,7 +71,7 @@
     const popup = document.createElement('div');
     popup.className = 'dmv-popup';
 
-    // Header
+    // Header with official 3D logo
     const header = document.createElement('div');
     header.className = 'dmv-popup-header';
     header.innerHTML = `
@@ -136,7 +138,10 @@
         <span class="dmv-format-badge">${escapeHtml(badgeText)}</span>
       `;
 
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
         btn.innerHTML = `<span>⏳ Downloading...</span>`;
         btn.style.opacity = '0.7';
 
@@ -223,14 +228,10 @@
   }
 
   // =========================================================================
-  // PLATFORM INJECTORS
+  // 1. YOUTUBE INJECTOR (Under the video in the action bar)
   // =========================================================================
-
-  /**
-   * 1. YouTube Injector
-   */
   function injectYouTube() {
-    // Watch Page Action Bar
+    // Watch Page Action Bar (Right below the video title/player)
     const watchActions = document.querySelector(
       'ytd-watch-metadata #actions #top-level-buttons-computed, #menu-container #top-level-buttons-computed'
     );
@@ -248,13 +249,13 @@
         e.preventDefault();
         e.stopPropagation();
         handleDownloadClick(window.location.href, btn, null);
-      });
+      }, true);
 
       wrap.appendChild(btn);
       watchActions.appendChild(wrap);
     }
 
-    // Shorts Page Action Bar
+    // Shorts Page Action Column (Right beside the Short)
     const shortsActions = document.querySelectorAll(
       'ytd-reel-player-overlay-renderer #actions, ytd-reel-video-renderer[is-active] #actions'
     );
@@ -273,7 +274,7 @@
           e.preventDefault();
           e.stopPropagation();
           handleDownloadClick(window.location.href, btn, null);
-        });
+        }, true);
 
         wrap.appendChild(btn);
         actions.appendChild(wrap);
@@ -281,17 +282,16 @@
     });
   }
 
-  /**
-   * Helper: Find Tweet Permalink from any tweet element, modal, or video container
-   */
+  // =========================================================================
+  // 2. X / TWITTER INJECTOR (Directly UNDER the video in the action bar)
+  // =========================================================================
   function resolveTweetUrl(container) {
-    // 1. Look for <time> tag's parent <a> link (standard Twitter timestamp permalink)
+    if (!container) return null;
     const timeLink = container.querySelector('time')?.closest('a');
     if (timeLink && timeLink.getAttribute('href')?.includes('/status/')) {
       return `https://x.com${timeLink.getAttribute('href').split('?')[0]}`;
     }
 
-    // 2. Look for any <a> tag with /status/
     const statusLinks = container.querySelectorAll('a[href*="/status/"]');
     for (const a of statusLinks) {
       const href = a.getAttribute('href');
@@ -300,14 +300,12 @@
       }
     }
 
-    // 3. Check if current window URL is a status URL
     if (window.location.pathname.includes('/status/')) {
       return `https://x.com${window.location.pathname.split('?')[0]}`;
     }
 
-    // 4. Look upwards in parent elements for status links
     let parent = container.parentElement;
-    for (let depth = 0; depth < 5 && parent; depth++) {
+    for (let depth = 0; depth < 6 && parent; depth++) {
       const parentLink = parent.querySelector('time')?.closest('a') || parent.querySelector('a[href*="/status/"]');
       if (parentLink && parentLink.getAttribute('href')?.includes('/status/')) {
         return `https://x.com${parentLink.getAttribute('href').split('?')[0]}`;
@@ -318,28 +316,85 @@
     return null;
   }
 
-  /**
-   * 2. X / Twitter Injector (Supports Timeline, Profile pages, Theatre mode, and Modal overlays)
-   */
   function injectX() {
-    // A. Action Bar Injection in standard tweets, cell containers, and modal dialogs
-    const tweetContainers = document.querySelectorAll(
-      'article[data-testid="tweet"], div[aria-modal="true"], div[data-testid="sheetDialog"], div[data-testid="cellInnerDiv"]'
-    );
+    // Strategy 1: Find all videos on X and inject into the action bar UNDER the video
+    const videos = document.querySelectorAll('video, [data-testid="videoPlayer"], [data-testid="videoComponent"]');
 
-    tweetContainers.forEach((container) => {
-      // Must contain a video or audio component
-      const hasVideo = container.querySelector(
-        'video, [data-testid="videoPlayer"], [data-testid="videoComponent"], [aria-label*="video" i]'
-      );
-      if (!hasVideo) return;
+    videos.forEach((vidEl) => {
+      const tweet = vidEl.closest('article[data-testid="tweet"]') || 
+                    vidEl.closest('div[data-testid="cellInnerDiv"]') || 
+                    vidEl.closest('div[aria-modal="true"]') || 
+                    vidEl.closest('div[role="dialog"]') || 
+                    vidEl.parentElement?.parentElement?.parentElement;
+      if (!tweet) return;
 
-      const actionBar = container.querySelector('div[role="group"]');
+      // Locate the action bar UNDER the video (div[role="group"])
+      const actionBar = tweet.querySelector('div[role="group"]');
+      if (actionBar && !actionBar.querySelector('.dmv-x-btn')) {
+        const wrap = document.createElement('div');
+        wrap.className = 'dmv-x-wrapper';
+
+        const btn = document.createElement('button');
+        btn.className = 'dmv-btn dmv-btn-compact dmv-x-btn';
+        btn.setAttribute('type', 'button');
+        btn.setAttribute('title', 'Download video with DownMyVid');
+        btn.innerHTML = `${LOGO_ICON_HTML}<span>Save</span>`;
+
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+
+          const domMedia = findDirectVideoInfo(tweet);
+          const tweetUrl = resolveTweetUrl(tweet) || window.location.href;
+          handleDownloadClick(tweetUrl, btn, domMedia);
+        }, true);
+
+        wrap.appendChild(btn);
+
+        // Place into the action bar next to Bookmark/Share
+        const bookmarkOrShare = actionBar.querySelector('[data-testid="bookmark"], [data-testid="share"], [aria-label*="Share" i]');
+        if (bookmarkOrShare && bookmarkOrShare.parentElement && bookmarkOrShare.parentElement.parentElement === actionBar) {
+          actionBar.insertBefore(wrap, bookmarkOrShare.parentElement);
+        } else {
+          actionBar.appendChild(wrap);
+        }
+      }
+
+      // Strategy 1B: If no action bar exists (theatre/modal), insert directly below media container
+      const mediaContainer = vidEl.closest('[data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="videoComponent"]') || vidEl.parentElement;
+      if (mediaContainer && mediaContainer.parentElement && !mediaContainer.parentElement.querySelector('.dmv-under-video-bar') && !actionBar) {
+        const subBar = document.createElement('div');
+        subBar.className = 'dmv-under-video-bar';
+
+        const subBtn = document.createElement('button');
+        subBtn.className = 'dmv-btn-under-video';
+        subBtn.innerHTML = `${LOGO_ICON_HTML}<span>Download Video</span>`;
+
+        subBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+
+          const domMedia = findDirectVideoInfo(tweet || vidEl);
+          const tweetUrl = resolveTweetUrl(tweet || vidEl) || window.location.href;
+          handleDownloadClick(tweetUrl, subBtn, domMedia);
+        }, true);
+
+        subBar.appendChild(subBtn);
+        mediaContainer.after(subBar);
+      }
+    });
+
+    // Strategy 2: Scan all tweet articles that contain video indicators
+    const allTweets = document.querySelectorAll('article[data-testid="tweet"]');
+    allTweets.forEach((tweet) => {
+      if (tweet.querySelector('.dmv-x-btn')) return;
+      const hasMedia = tweet.querySelector('video, [data-testid="videoPlayer"], [data-testid="videoComponent"], [aria-label*="video" i], [data-testid="playButton"]');
+      if (!hasMedia) return;
+
+      const actionBar = tweet.querySelector('div[role="group"]');
       if (!actionBar || actionBar.querySelector('.dmv-x-btn')) return;
-
-      const domMedia = findDirectVideoInfo(container);
-      const tweetUrl = resolveTweetUrl(container) || (domMedia?.directUrl ? window.location.href : null);
-      if (!tweetUrl && !domMedia?.directUrl) return;
 
       const wrap = document.createElement('div');
       wrap.className = 'dmv-x-wrapper';
@@ -353,83 +408,111 @@
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        handleDownloadClick(tweetUrl || window.location.href, btn, domMedia);
-      });
+        e.stopImmediatePropagation();
+
+        const domMedia = findDirectVideoInfo(tweet);
+        const tweetUrl = resolveTweetUrl(tweet) || window.location.href;
+        handleDownloadClick(tweetUrl, btn, domMedia);
+      }, true);
 
       wrap.appendChild(btn);
       actionBar.appendChild(wrap);
     });
+  }
 
-    // B. Direct Floating Player Badge on [data-testid="videoPlayer"] / [data-testid="videoComponent"]
-    const playerContainers = document.querySelectorAll(
-      '[data-testid="videoPlayer"], [data-testid="videoComponent"]'
-    );
+  // =========================================================================
+  // 3. INSTAGRAM INJECTOR (Directly UNDER the video, NEVER inside)
+  // =========================================================================
+  function injectInstagram() {
+    const videos = document.querySelectorAll('video');
 
-    playerContainers.forEach((player) => {
-      if (player.querySelector('.dmv-player-badge')) return;
+    videos.forEach((vid) => {
+      const container = vid.closest('article') || 
+                        vid.closest('div[role="dialog"]') || 
+                        vid.closest('div[role="presentation"]') || 
+                        vid.parentElement?.parentElement;
+      if (!container) return;
 
-      const parentContainer = player.closest('article, div[aria-modal="true"], div[data-testid="cellInnerDiv"]') || player.parentElement;
-      const domMedia = findDirectVideoInfo(parentContainer || player);
-      const tweetUrl = resolveTweetUrl(parentContainer || player) || window.location.href;
+      if (container.querySelector('.dmv-ig-btn')) return;
 
-      const badge = document.createElement('button');
-      badge.className = 'dmv-player-badge';
-      badge.setAttribute('type', 'button');
-      badge.setAttribute('title', 'Download with DownMyVid');
-      badge.innerHTML = `${LOGO_ICON_HTML}<span>Download</span>`;
+      // Find the action bar directly UNDER the video (Like, Comment, Share row)
+      const actionBar = container.querySelector('section, div[role="presentation"] > div, div[role="group"]');
+      if (!actionBar) return;
 
-      badge.addEventListener('click', (e) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'dmv-ig-wrapper';
+
+      const btn = document.createElement('button');
+      btn.className = 'dmv-btn dmv-btn-compact dmv-ig-btn';
+      btn.setAttribute('type', 'button');
+      btn.setAttribute('title', 'Download video with DownMyVid');
+      btn.innerHTML = `${LOGO_ICON_HTML}<span>DownMyVid</span>`;
+
+      // Crucial: capture: true + stopImmediatePropagation prevents Instagram from pausing the video
+      btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        handleDownloadClick(tweetUrl, badge, domMedia);
-      });
+        e.stopImmediatePropagation();
 
-      // Ensure container has relative positioning so absolute badge places properly
-      if (window.getComputedStyle(player).position === 'static') {
-        player.style.position = 'relative';
+        const directSrc = vid.currentSrc || vid.src || '';
+        const domMedia = {
+          directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
+          poster: vid.getAttribute('poster') || '',
+          author: container.querySelector('header a, a[role="link"]')?.textContent?.trim() || 'Instagram Creator',
+          title: container.querySelector('h1, span')?.textContent?.trim().slice(0, 100) || 'Instagram Video',
+        };
+
+        const linkEl = container.querySelector('a[href*="/reel/"], a[href*="/p/"]');
+        let postUrl = linkEl ? `https://www.instagram.com${linkEl.getAttribute('href').split('?')[0]}` : null;
+        if (!postUrl && (window.location.pathname.includes('/reel/') || window.location.pathname.includes('/p/'))) {
+          postUrl = `https://www.instagram.com${window.location.pathname.split('?')[0]}`;
+        }
+        if (!postUrl) {
+          postUrl = window.location.href;
+        }
+
+        handleDownloadClick(postUrl, btn, domMedia);
+      }, true);
+
+      wrap.appendChild(btn);
+
+      // Insert next to Bookmark or in the action bar row
+      const bookmarkBtn = actionBar.querySelector('svg[aria-label*="Save" i], svg[aria-label*="Bookmark" i]')?.closest('div, button');
+      if (bookmarkBtn && bookmarkBtn.parentElement === actionBar) {
+        actionBar.insertBefore(wrap, bookmarkBtn);
+      } else {
+        actionBar.appendChild(wrap);
       }
-
-      player.appendChild(badge);
     });
   }
 
-  /**
-   * 3. Instagram Injector (Feed Posts, Reels, Dialog Modals, and Standalone Players)
-   */
-  function injectInstagram() {
-    const videoElements = document.querySelectorAll('video');
+  // =========================================================================
+  // 4. FACEBOOK INJECTOR (Directly UNDER the video in the toolbar)
+  // =========================================================================
+  function injectFacebook() {
+    const videos = document.querySelectorAll('video');
 
-    videoElements.forEach((vid) => {
-      const container = vid.closest('article') || vid.closest('div[role="dialog"]') || vid.closest('div[role="presentation"]') || vid.parentElement?.parentElement;
-      if (!container) return;
+    videos.forEach((vid) => {
+      const post = vid.closest('div[role="article"]') || 
+                   vid.closest('div[data-pagelet*="FeedUnit"]') || 
+                   vid.closest('div[role="main"]') || 
+                   vid.closest('div[role="dialog"]') || 
+                   vid.parentElement?.parentElement?.parentElement;
+      if (!post) return;
 
-      // Extract direct DOM stream URL from active <video>
-      const directSrc = vid.currentSrc || vid.src || '';
-      const domMedia = {
-        directUrl: directSrc.startsWith('http') ? directSrc : null,
-        poster: vid.getAttribute('poster') || '',
-        author: container.querySelector('header a, a[role="link"]')?.textContent?.trim() || 'Instagram Creator',
-        title: container.querySelector('h1, span')?.textContent?.trim().slice(0, 100) || 'Instagram Video',
-      };
+      if (post.querySelector('.dmv-fb-btn')) return;
 
-      // Resolve Instagram Post URL
-      const linkEl = container.querySelector('a[href*="/reel/"], a[href*="/p/"]');
-      let postUrl = linkEl ? `https://www.instagram.com${linkEl.getAttribute('href').split('?')[0]}` : null;
-      if (!postUrl && (window.location.pathname.includes('/reel/') || window.location.pathname.includes('/p/'))) {
-        postUrl = `https://www.instagram.com${window.location.pathname.split('?')[0]}`;
-      }
-      if (!postUrl) {
-        postUrl = window.location.href;
-      }
+      // Find the action bar under the video: toolbar containing Like/Comment/Share
+      const actionBar = post.querySelector('div[role="toolbar"], div[role="group"]');
+      const likeBtn = post.querySelector('div[aria-label*="Like" i], div[aria-label*="J’aime" i], div[aria-label*="Me gusta" i], div[aria-label*="إعجاب" i]');
+      const targetBar = actionBar || likeBtn?.parentElement?.parentElement || post.querySelector('div[role="group"]');
 
-      // A. Action row injection (near like/comment/share)
-      const actionBar = container.querySelector('section, div[role="presentation"]');
-      if (actionBar && !actionBar.querySelector('.dmv-ig-btn')) {
+      if (targetBar && !targetBar.querySelector('.dmv-fb-btn')) {
         const wrap = document.createElement('div');
-        wrap.className = 'dmv-ig-wrapper';
+        wrap.className = 'dmv-fb-wrapper';
 
         const btn = document.createElement('button');
-        btn.className = 'dmv-btn dmv-btn-compact dmv-ig-btn';
+        btn.className = 'dmv-btn dmv-btn-compact dmv-fb-btn';
         btn.setAttribute('type', 'button');
         btn.setAttribute('title', 'Download video with DownMyVid');
         btn.innerHTML = `${LOGO_ICON_HTML}<span>DownMyVid</span>`;
@@ -437,33 +520,56 @@
         btn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          handleDownloadClick(postUrl, btn, domMedia);
-        });
+          e.stopImmediatePropagation();
+
+          const directSrc = vid.currentSrc || vid.src || '';
+          const domMedia = {
+            directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
+            poster: vid.getAttribute('poster') || '',
+            author: post.querySelector('h2, h3, h4, strong, a[role="link"]')?.textContent?.trim() || 'Facebook Creator',
+            title: post.querySelector('div[data-ad-preview="message"], div[dir="auto"]')?.textContent?.trim().slice(0, 100) || 'Facebook Video',
+          };
+
+          const link = post.querySelector('a[href*="/videos/"], a[href*="/watch/"], a[href*="/reel/"]');
+          let fbUrl = link
+            ? (link.href.startsWith('http') ? link.href.split('?')[0] : `https://www.facebook.com${link.getAttribute('href').split('?')[0]}`)
+            : window.location.href;
+
+          handleDownloadClick(fbUrl, btn, domMedia);
+        }, true);
 
         wrap.appendChild(btn);
-        actionBar.appendChild(wrap);
-      }
+        targetBar.appendChild(wrap);
+      } else {
+        // Fallback: place directly beneath the video wrapper
+        const videoWrapper = vid.parentElement;
+        if (videoWrapper && videoWrapper.parentElement && !videoWrapper.parentElement.querySelector('.dmv-under-video-bar')) {
+          const subBar = document.createElement('div');
+          subBar.className = 'dmv-under-video-bar';
 
-      // B. Floating Player Badge on the video player element
-      const playerWrapper = vid.parentElement;
-      if (playerWrapper && !playerWrapper.querySelector('.dmv-player-badge')) {
-        const badge = document.createElement('button');
-        badge.className = 'dmv-player-badge';
-        badge.setAttribute('type', 'button');
-        badge.setAttribute('title', 'Download with DownMyVid');
-        badge.innerHTML = `${LOGO_ICON_HTML}<span>Download</span>`;
+          const subBtn = document.createElement('button');
+          subBtn.className = 'dmv-btn-under-video';
+          subBtn.innerHTML = `${LOGO_ICON_HTML}<span>Download Video</span>`;
 
-        badge.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          handleDownloadClick(postUrl, badge, domMedia);
-        });
+          subBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
 
-        if (window.getComputedStyle(playerWrapper).position === 'static') {
-          playerWrapper.style.position = 'relative';
+            const directSrc = vid.currentSrc || vid.src || '';
+            const domMedia = {
+              directUrl: (directSrc.startsWith('http') && !directSrc.includes('blob:')) ? directSrc : null,
+              poster: vid.getAttribute('poster') || '',
+              author: 'Facebook Creator',
+              title: 'Facebook Video',
+            };
+
+            handleDownloadClick(window.location.href, subBtn, domMedia);
+          }, true);
+
+          subBar.appendChild(subBtn);
+          videoWrapper.after(subBar);
         }
-
-        playerWrapper.appendChild(badge);
       }
     });
   }
@@ -475,16 +581,18 @@
     if (IS_YOUTUBE) injectYouTube();
     if (IS_X) injectX();
     if (IS_INSTAGRAM) injectInstagram();
+    if (IS_FACEBOOK) injectFacebook();
   }
 
-  // Initial scan
+  // Initial scan & periodic scan for dynamic feed scrolling
   scanAndInject();
+  setInterval(scanAndInject, 1000);
 
-  // MutationObserver with 250ms debounce for Single Page Applications
+  // MutationObserver with 200ms debounce
   let debounceTimer = null;
   const observer = new MutationObserver(() => {
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(scanAndInject, 250);
+    debounceTimer = setTimeout(scanAndInject, 200);
   });
 
   observer.observe(document.body, {
@@ -493,7 +601,7 @@
   });
 
   // Re-check on URL pushState / history changes
-  window.addEventListener('popstate', () => setTimeout(scanAndInject, 400));
+  window.addEventListener('popstate', () => setTimeout(scanAndInject, 300));
 
   // =========================================================================
   // MESSAGE LISTENER (FOR POPUP QUERYING THE ACTIVE VIDEO)
@@ -505,7 +613,6 @@
       // Find currently playing video, or one visible in viewport
       let activeVid = videos.find((v) => !v.paused && !v.ended && v.currentTime > 0);
       if (!activeVid && videos.length > 0) {
-        // Pick video closest to viewport center
         const centerY = window.innerHeight / 2;
         let minDiff = Infinity;
         videos.forEach((v) => {
@@ -521,12 +628,12 @@
       }
 
       if (activeVid) {
-        const container = activeVid.closest('article, div[aria-modal="true"], div[data-testid="cellInnerDiv"], div[role="dialog"]') || activeVid.parentElement;
+        const container = activeVid.closest('article, div[aria-modal="true"], div[data-testid="cellInnerDiv"], div[role="dialog"], div[role="article"]') || activeVid.parentElement;
         const domMedia = {
-          directUrl: activeVid.currentSrc || activeVid.src || '',
+          directUrl: (activeVid.currentSrc && activeVid.currentSrc.startsWith('http') && !activeVid.currentSrc.includes('blob:')) ? activeVid.currentSrc : null,
           poster: activeVid.getAttribute('poster') || '',
-          author: container?.querySelector('header a, [data-testid="User-Name"]')?.textContent?.trim() || 'Video',
-          title: container?.querySelector('[data-testid="tweetText"], h1, span')?.textContent?.trim().slice(0, 100) || 'Video Stream',
+          author: container?.querySelector('header a, [data-testid="User-Name"], h2, h3, h4')?.textContent?.trim() || 'Video',
+          title: container?.querySelector('[data-testid="tweetText"], div[data-ad-preview="message"], h1, span')?.textContent?.trim().slice(0, 100) || 'Video Stream',
         };
 
         let resolvedUrl = window.location.href;
@@ -535,6 +642,9 @@
         } else if (IS_INSTAGRAM && container) {
           const link = container.querySelector('a[href*="/reel/"], a[href*="/p/"]');
           if (link) resolvedUrl = `https://www.instagram.com${link.getAttribute('href').split('?')[0]}`;
+        } else if (IS_FACEBOOK && container) {
+          const link = container.querySelector('a[href*="/videos/"], a[href*="/watch/"], a[href*="/reel/"]');
+          if (link) resolvedUrl = link.href.startsWith('http') ? link.href.split('?')[0] : `https://www.facebook.com${link.getAttribute('href').split('?')[0]}`;
         }
 
         sendResponse({
