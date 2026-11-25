@@ -23,6 +23,7 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == 'journeysailblog@gmail.com';
     }
 
+    // Blog Posts Collection
     match /blogPosts/{postId} {
       allow read: if resource.data.published == true || isBlogAdmin();
       allow create: if isBlogAdmin()
@@ -44,6 +45,23 @@ service cloud.firestore {
         && request.resource.data.category is string && request.resource.data.category.size() > 0 && request.resource.data.category.size() <= 40
         && request.resource.data.published is bool;
       allow delete: if isBlogAdmin();
+    }
+
+    // Guest Comments Collection (Adjacency List Pattern)
+    match /comments/{commentId} {
+      // Anyone can read approved comments; admin can read all (including pending/spam)
+      allow read: if resource.data.status == 'approved' || isBlogAdmin();
+
+      // Guest comment creation with strict validation
+      allow create: if request.resource.data.post_slug is string
+        && request.resource.data.post_slug.size() > 0 && request.resource.data.post_slug.size() <= 255
+        && (request.resource.data.parent_id == null || request.resource.data.parent_id is string)
+        && request.resource.data.guest_name is string && request.resource.data.guest_name.size() <= 100
+        && request.resource.data.content is string && request.resource.data.content.size() > 0 && request.resource.data.content.size() <= 1000
+        && request.resource.data.status in ['approved', 'pending', 'rejected', 'spam'];
+
+      // Only blog admin can edit or remove comments (moderation)
+      allow update, delete: if isBlogAdmin();
     }
 
     // User profile document

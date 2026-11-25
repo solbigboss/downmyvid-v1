@@ -75,6 +75,36 @@ async function route(request, env) {
   if (url.pathname === '/api/health' && request.method === 'GET') return json({ status: 'ok', server: 'DownMyVid Cloudflare Worker', capabilities: { metaExtraction: true, mp3: false, hls: false } });
   if (!env.MEDIA_SIGNING_KEY || env.MEDIA_SIGNING_KEY.length < 32) return json({ error: 'Backend signing key is not configured.' }, 503);
   if (['/api/stream-media', '/api/proxy-download', '/api/x-stream'].includes(url.pathname) && ['GET', 'HEAD'].includes(request.method)) return proxy(request, env, url);
+  if (url.pathname === '/api/comments' && request.method === 'POST') {
+    let input;
+    try { input = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+    // Honeypot trap: if website field filled, silently return 200 OK
+    if (input.website && String(input.website).trim().length > 0) {
+      return json({ success: true, message: 'Comment submitted successfully.', comment: { id: crypto.randomUUID(), post_slug: input.post_slug || '', parent_id: input.parent_id || null, guest_name: 'Anonymous', content: '', status: 'approved', created_at: new Date().toISOString() } });
+    }
+    const { post_slug, content, guest_name, parent_id } = input;
+    if (!post_slug || typeof post_slug !== 'string' || !post_slug.trim()) return json({ error: 'post_slug is required.' }, 400);
+    if (!content || typeof content !== 'string' || !content.trim()) return json({ error: 'Comment content cannot be empty.' }, 400);
+    if (content.length > 1000) return json({ error: 'Comment content cannot exceed 1000 characters.' }, 400);
+
+    const cleanName = (guest_name && typeof guest_name === 'string') ? guest_name.trim().slice(0, 100) || 'Anonymous' : 'Anonymous';
+    const cleanContent = content.trim().slice(0, 1000);
+    const spamRegex = /(https?:\/\/|www\.|\.ru\/|\.xyz\/|viagra|cialis|casino|crypto giveaway|free btc|buy followers|whatsapp:|t\.me\/|escort|dating service|loans|passive income)/i;
+    const isSpam = spamRegex.test(`${cleanName} ${cleanContent}`);
+    const status = isSpam ? 'spam' : 'approved';
+
+    const newComment = {
+      id: crypto.randomUUID(),
+      post_slug: post_slug.trim().toLowerCase(),
+      parent_id: parent_id ? String(parent_id).trim() : null,
+      guest_name: cleanName,
+      content: cleanContent,
+      status,
+      created_at: new Date().toISOString()
+    };
+    return json({ success: true, comment: newComment, status, message: isSpam ? 'Your comment has been submitted and is pending review.' : 'Comment posted successfully!' }, 201);
+  }
+
   if (url.pathname !== '/api/extract') return json({ error: 'Unknown API endpoint.' }, 404);
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405);
   const ip = request.headers.get('CF-Connecting-IP');

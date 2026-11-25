@@ -56,3 +56,26 @@ export interface DownloadHistoryItem {
   originalUrl: string;
   mediaType: 'video' | 'audio';
 }
+
+export type CommentStatus = 'approved' | 'pending' | 'rejected' | 'spam';
+
+export interface BlogComment {
+  id: string;
+  post_slug: string;
+  parent_id: string | null;
+  guest_name: string;
+  content: string;
+  status: CommentStatus;
+  created_at: string;
+  updated_at?: string;
+  reply_count?: number;
+  replies?: BlogComment[];
+}
+
+export interface CreateCommentDTO {
+  post_slug: string;
+  parent_id?: string | null;
+  guest_name?: string;
+  content: string;
+  website?: string; // Honeypot field for bot trapping
+}

@@ -3,6 +3,7 @@ import { ArrowLeft, Calendar, Image as ImageIcon, LoaderCircle } from 'lucide-re
 import { BlogPost } from '../data/blog';
 import { getPublishedPost, listPublishedPosts } from '../services/blogService';
 import { MarkdownContent } from './MarkdownContent';
+import { BlogCommentSection } from './BlogCommentSection';
 import { Language } from '../types';
 import { blogCopy } from '../data/blogCopy';
 
@@ -54,6 +55,11 @@ export const BlogView: React.FC<BlogViewProps> = ({ slug, currentLang, onBack, o
         <h1 className="mt-7 text-3xl sm:text-5xl font-black tracking-tight">{post.title}</h1>
         <p className="mt-3 text-sm text-[#536471] flex items-center gap-2"><Calendar className="w-4 h-4" /> {dateLabel(post.publishedAt)}</p>
         <MarkdownContent value={post.body} dir={rtl(currentLang) ? 'rtl' : 'ltr'} className="mt-8 text-base text-[#536471] dark:text-[#cfd9de]" />
+        
+        {/* Guest Comments & Discussion Section */}
+        <div className="mt-12 pt-6 border-t border-[#cfd9de] dark:border-[#2f3336]">
+          <BlogCommentSection postSlug={post.slug} currentLang={currentLang} />
+        </div>
       </> : <p className="mt-10 text-[#536471]">This post was not found.</p>}
     </article>;
   }

@@ -2438,6 +2438,200 @@ async function startServer() {
     }
   });
 
+  // =========================================================================
+  // Blog Guest Comment System API (Adjacency List Pattern & Spam Guard)
+  // =========================================================================
+  const COMMENTS_DIR = path.resolve(__dirname, 'data');
+  const COMMENTS_FILE = path.resolve(COMMENTS_DIR, 'comments.json');
+
+  interface CommentRecord {
+    id: string;
+    post_slug: string;
+    parent_id: string | null;
+    guest_name: string;
+    content: string;
+    status: 'approved' | 'pending' | 'rejected' | 'spam';
+    created_at: string;
+    updated_at: string;
+  }
+
+  function loadComments(): CommentRecord[] {
+    try {
+      if (!fs.existsSync(COMMENTS_FILE)) {
+        if (!fs.existsSync(COMMENTS_DIR)) {
+          fs.mkdirSync(COMMENTS_DIR, { recursive: true });
+        }
+        fs.writeFileSync(COMMENTS_FILE, JSON.stringify([]), 'utf-8');
+        return [];
+      }
+      const data = fs.readFileSync(COMMENTS_FILE, 'utf-8');
+      return JSON.parse(data) || [];
+    } catch (err) {
+      console.error('Failed to load comments from disk:', err);
+      return [];
+    }
+  }
+
+  function saveComments(records: CommentRecord[]): void {
+    try {
+      if (!fs.existsSync(COMMENTS_DIR)) {
+        fs.mkdirSync(COMMENTS_DIR, { recursive: true });
+      }
+      fs.writeFileSync(COMMENTS_FILE, JSON.stringify(records, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('Failed to save comments to disk:', err);
+    }
+  }
+
+  const SPAM_KEYWORDS = [
+    'viagra', 'cialis', 'casino', 'poker', 'crypto giveaway',
+    'free btc', 'free eth', 'buy followers', 'telegram:', 'whatsapp:',
+    'wa.me/', 't.me/', 'escort', 'dating service', 'loans',
+    'earn money online', 'passive income', 'seo backlink',
+    'investment guaranteed', 'hot girls', 'adult dating',
+    'gift cards', 'hack account', 'click here'
+  ];
+
+  function detectSpam(content: string, guestName: string): boolean {
+    const combined = `${guestName} ${content}`.toLowerCase();
+    // 1. Check for URL patterns
+    if (/(https?:\/\/|www\.|\.ru\/|\.xyz\/|\.top\/|ftp:\/\/)/i.test(combined)) {
+      return true;
+    }
+    // 2. Check for common spam keywords
+    for (const kw of SPAM_KEYWORDS) {
+      if (combined.includes(kw)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // GET /api/comments?post_slug=<slug> - Fetch top-level approved comments with reply counts
+  app.get('/api/comments', (req, res) => {
+    const postSlug = String(req.query.post_slug || '').trim().toLowerCase();
+    if (!postSlug) {
+      return res.status(400).json({ error: 'post_slug query parameter is required.' });
+    }
+
+    const all = loadComments();
+    const topLevel = all
+      .filter((c) => c.post_slug === postSlug && !c.parent_id && c.status === 'approved')
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const commentsWithReplyCounts = topLevel.map((c) => {
+      const replyCount = all.filter((r) => r.parent_id === c.id && r.status === 'approved').length;
+      return {
+        ...c,
+        reply_count: replyCount,
+      };
+    });
+
+    res.json({
+      comments: commentsWithReplyCounts,
+      total_count: commentsWithReplyCounts.length,
+    });
+  });
+
+  // GET /api/comments/:commentId/replies - Lazy-load direct replies for a comment
+  app.get('/api/comments/:commentId/replies', (req, res) => {
+    const commentId = String(req.params.commentId).trim();
+    if (!commentId) {
+      return res.status(400).json({ error: 'commentId parameter is required.' });
+    }
+
+    const all = loadComments();
+    const replies = all
+      .filter((c) => c.parent_id === commentId && c.status === 'approved')
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    res.json({
+      replies,
+      count: replies.length,
+    });
+  });
+
+  // POST /api/comments - Create a guest comment with honeypot and strict one-level nesting
+  app.post('/api/comments', (req, res) => {
+    const { post_slug, parent_id, guest_name, content, website } = req.body || {};
+
+    // 1. Honeypot Bot Trap: If hidden "website" field contains any data, silently return 200 OK
+    if (website && String(website).trim().length > 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'Comment submitted successfully.',
+        comment: {
+          id: (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `cmt_${Date.now()}`),
+          post_slug: post_slug || '',
+          parent_id: parent_id || null,
+          guest_name: 'Anonymous',
+          content: '',
+          status: 'approved',
+          created_at: new Date().toISOString(),
+        },
+      });
+    }
+
+    // 2. Validate input fields
+    if (!post_slug || typeof post_slug !== 'string' || !post_slug.trim()) {
+      return res.status(400).json({ error: 'post_slug is required.' });
+    }
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'Comment content cannot be empty.' });
+    }
+    if (content.trim().length > 1000) {
+      return res.status(400).json({ error: 'Comment content cannot exceed 1000 characters.' });
+    }
+
+    const cleanSlug = post_slug.trim().toLowerCase();
+    const cleanGuestName = (guest_name && typeof guest_name === 'string')
+      ? guest_name.trim().slice(0, 100) || 'Anonymous'
+      : 'Anonymous';
+    const cleanContent = content.trim().slice(0, 1000);
+
+    // 3. Strict One-Level-Deep Nesting Rule:
+    // If replying to a reply, flatten under the root parent comment
+    const all = loadComments();
+    let targetParentId: string | null = parent_id ? String(parent_id).trim() : null;
+    if (targetParentId) {
+      const parentComment = all.find((c) => c.id === targetParentId);
+      if (parentComment) {
+        if (parentComment.parent_id) {
+          targetParentId = parentComment.parent_id; // Flatten to root parent
+        }
+      } else {
+        targetParentId = null;
+      }
+    }
+
+    // 4. Spam and URL keyword filter
+    const isSpam = detectSpam(cleanContent, cleanGuestName);
+    const status: 'approved' | 'spam' = isSpam ? 'spam' : 'approved';
+
+    const newComment: CommentRecord = {
+      id: (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
+      post_slug: cleanSlug,
+      parent_id: targetParentId,
+      guest_name: cleanGuestName,
+      content: cleanContent,
+      status,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    all.push(newComment);
+    saveComments(all);
+
+    res.status(201).json({
+      success: true,
+      comment: newComment,
+      status,
+      message: isSpam
+        ? 'Your comment has been submitted and is pending review.'
+        : 'Comment posted successfully!',
+    });
+  });
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', server: 'Downmyvid Full-Stack Backend' });
