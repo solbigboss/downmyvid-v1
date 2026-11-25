@@ -35,10 +35,13 @@
       color: #00f2fe;
       text-shadow: 0 0 12px rgba(0, 242, 254, 0.4);
     }
-    .brand svg {
-      width: 20px;
-      height: 20px;
-      fill: #3bb3ff;
+    .brand-logo {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      object-fit: cover;
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.45);
+      border: 1px solid rgba(0, 242, 254, 0.35);
     }
     .badge {
       font-size: 10px;
@@ -170,7 +173,7 @@
 <body>
   <div class="header">
     <div class="brand">
-      <svg viewBox="0 0 24 24"><path d="M12 15.586l-4.293-4.293-1.414 1.414L12 18.414l5.707-5.707-1.414-1.414L12 15.586zM11 4h2v10h-2V4zM4 19h16v2H4v-2z"/></svg>
+      <img src="icons/icon32.png" class="brand-logo" alt="DownMyVid" />
       <span>DownMyVid</span>
     </div>
     <span class="badge">V3 Extension</span>

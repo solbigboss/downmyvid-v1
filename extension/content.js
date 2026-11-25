@@ -12,6 +12,10 @@
   const IS_INSTAGRAM = HOSTNAME.includes('instagram.com');
   const IS_TIKTOK = HOSTNAME.includes('tiktok.com');
 
+  const LOGO_ICON_URL = chrome.runtime.getURL('icons/icon16.png');
+  const LOGO_HEADER_URL = chrome.runtime.getURL('icons/icon32.png');
+  const LOGO_ICON_HTML = `<img src="${LOGO_ICON_URL}" class="dmv-btn-logo" alt="DownMyVid" />`;
+
   const DOWNLOAD_ICON_SVG = `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M12 15.586l-4.293-4.293-1.414 1.414L12 18.414l5.707-5.707-1.414-1.414L12 15.586zM11 4h2v10h-2V4zM4 19h16v2H4v-2z"/>
@@ -70,7 +74,7 @@
     header.className = 'dmv-popup-header';
     header.innerHTML = `
       <div class="dmv-popup-title">
-        ${DOWNLOAD_ICON_SVG}
+        <img src="${LOGO_HEADER_URL}" class="dmv-logo-img" alt="DownMyVid" />
         <span>DownMyVid 3D Downloader</span>
       </div>
       <button class="dmv-popup-close" title="Close">✕</button>
@@ -238,7 +242,7 @@
       btn.className = 'dmv-btn dmv-yt-btn';
       btn.setAttribute('type', 'button');
       btn.setAttribute('title', 'Download video with DownMyVid');
-      btn.innerHTML = `${DOWNLOAD_ICON_SVG}<span>DownMyVid</span>`;
+      btn.innerHTML = `${LOGO_ICON_HTML}<span>DownMyVid</span>`;
 
       btn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -263,7 +267,7 @@
         btn.className = 'dmv-btn dmv-btn-compact dmv-yt-btn';
         btn.setAttribute('type', 'button');
         btn.setAttribute('title', 'Download Short with DownMyVid');
-        btn.innerHTML = `${DOWNLOAD_ICON_SVG}<span>Save</span>`;
+        btn.innerHTML = `${LOGO_ICON_HTML}<span>Save</span>`;
 
         btn.addEventListener('click', (e) => {
           e.preventDefault();
@@ -344,7 +348,7 @@
       btn.className = 'dmv-btn dmv-btn-compact dmv-x-btn';
       btn.setAttribute('type', 'button');
       btn.setAttribute('title', 'Download video with DownMyVid');
-      btn.innerHTML = `${DOWNLOAD_ICON_SVG}<span>Save</span>`;
+      btn.innerHTML = `${LOGO_ICON_HTML}<span>Save</span>`;
 
       btn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -372,7 +376,7 @@
       badge.className = 'dmv-player-badge';
       badge.setAttribute('type', 'button');
       badge.setAttribute('title', 'Download with DownMyVid');
-      badge.innerHTML = `${DOWNLOAD_ICON_SVG}<span>Download</span>`;
+      badge.innerHTML = `${LOGO_ICON_HTML}<span>Download</span>`;
 
       badge.addEventListener('click', (e) => {
         e.preventDefault();
@@ -428,7 +432,7 @@
         btn.className = 'dmv-btn dmv-btn-compact dmv-ig-btn';
         btn.setAttribute('type', 'button');
         btn.setAttribute('title', 'Download video with DownMyVid');
-        btn.innerHTML = `${DOWNLOAD_ICON_SVG}<span>DownMyVid</span>`;
+        btn.innerHTML = `${LOGO_ICON_HTML}<span>DownMyVid</span>`;
 
         btn.addEventListener('click', (e) => {
           e.preventDefault();
@@ -447,7 +451,7 @@
         badge.className = 'dmv-player-badge';
         badge.setAttribute('type', 'button');
         badge.setAttribute('title', 'Download with DownMyVid');
-        badge.innerHTML = `${DOWNLOAD_ICON_SVG}<span>Download</span>`;
+        badge.innerHTML = `${LOGO_ICON_HTML}<span>Download</span>`;
 
         badge.addEventListener('click', (e) => {
           e.preventDefault();

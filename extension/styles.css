@@ -55,6 +55,15 @@
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3)) !important;
 }
 
+.dmv-btn-logo {
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 4px !important;
+  object-fit: cover !important;
+  vertical-align: middle !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
 /* Compact button for Twitter timelines and Instagram rows */
 .dmv-btn-compact {
   padding: 6px 10px !important;
@@ -202,6 +211,15 @@
   font-weight: 800 !important;
   color: #00f2fe !important;
   text-shadow: 0 0 10px rgba(0, 242, 254, 0.4) !important;
+}
+
+.dmv-logo-img {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 7px !important;
+  object-fit: cover !important;
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.45) !important;
+  border: 1px solid rgba(0, 242, 254, 0.35) !important;
 }
 
 .dmv-popup-close {
