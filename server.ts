@@ -63,71 +63,333 @@ function isSafeExternalUrl(rawUrl: string): boolean {
   }
 }
 
-// In-memory sliding rate limiter (no external dependencies needed)
-const ipRateMap = new Map<string, { count: number; resetAt: number }>();
-function rateLimiter(limit: number, windowMs: number) {
-  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+// =========================================================================
+// SECURITY HARDENING: Scoped Tiered In-Memory Rate Limiters (DDoS & Cost Protection)
+// =========================================================================
+function createRateLimiter(bucketName: string, limit: number, windowMs: number, customMessage?: string) {
+  const store = new Map<string, { count: number; resetAt: number }>();
+
+  // Periodic cleanup of expired entries
+  setInterval(() => {
     const now = Date.now();
-    const entry = ipRateMap.get(ip);
+    for (const [key, value] of store.entries()) {
+      if (now > value.resetAt) {
+        store.delete(key);
+      }
+    }
+  }, 60000).unref();
+
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    // Extract real client IP: prioritize Cloudflare CF-Connecting-IP, then X-Forwarded-For, then remoteAddress
+    const ip =
+      (req.headers['cf-connecting-ip'] as string)?.trim() ||
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
+      req.socket.remoteAddress ||
+      'unknown';
+
+    const now = Date.now();
+    const entry = store.get(ip);
 
     if (!entry || now > entry.resetAt) {
-      ipRateMap.set(ip, { count: 1, resetAt: now + windowMs });
+      store.set(ip, { count: 1, resetAt: now + windowMs });
+      res.setHeader('X-RateLimit-Limit', limit);
+      res.setHeader('X-RateLimit-Remaining', limit - 1);
+      res.setHeader('X-RateLimit-Reset', Math.ceil((now + windowMs) / 1000));
       return next();
     }
 
     if (entry.count >= limit) {
+      const retryAfter = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+      res.setHeader('Retry-After', retryAfter);
+      res.setHeader('X-RateLimit-Limit', limit);
+      res.setHeader('X-RateLimit-Remaining', 0);
+      res.setHeader('X-RateLimit-Reset', Math.ceil(entry.resetAt / 1000));
       return res.status(429).json({
-        error: 'Too many requests. Please slow down.',
-        retryAfter: Math.ceil((entry.resetAt - now) / 1000),
+        error: 'Too Many Requests',
+        message: customMessage || `Rate limit exceeded. Please wait ${retryAfter} second(s) before trying again.`,
+        retryAfter,
+        bucket: bucketName,
       });
     }
 
     entry.count += 1;
+    res.setHeader('X-RateLimit-Limit', limit);
+    res.setHeader('X-RateLimit-Remaining', Math.max(0, limit - entry.count));
+    res.setHeader('X-RateLimit-Reset', Math.ceil(entry.resetAt / 1000));
     next();
   };
 }
 
-// Cleanup rate-limit map periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of ipRateMap.entries()) {
-    if (now > value.resetAt) {
-      ipRateMap.delete(key);
+// Global pageview / general API limit (120 reqs/min per IP) to block scrapers
+const globalLimiter = createRateLimiter('global', 120, 60 * 1000, 'Global rate limit exceeded. Please slow down.');
+
+// Video analysis and media proxy limit (15 reqs/min per IP) to prevent CPU and bandwidth abuse
+const videoLimiter = createRateLimiter('video-processing', 15, 60 * 1000, 'Video processing limit exceeded (15/min). Please wait a moment.');
+
+// Comment and form submission limit (5 reqs/min per IP) to prevent spamming
+const commentLimiter = createRateLimiter('comments', 5, 60 * 1000, 'Comment rate limit exceeded (5/min). Please wait before posting again.');
+
+// Admin endpoints limit (30 reqs/min per IP)
+const adminLimiter = createRateLimiter('admin', 30, 60 * 1000, 'Admin action rate limit reached.');
+
+// High-frequency HLS segment streaming limit (600 reqs/min per IP)
+const hlsLimiter = createRateLimiter('hls-stream', 600, 60 * 1000);
+
+// =========================================================================
+// SECURITY HARDENING: Cloudflare Turnstile Verification
+// =========================================================================
+async function verifyTurnstile(token?: string, remoteIp?: string): Promise<{ success: boolean; error?: string }> {
+  const secretKey = process.env.TURNSTILE_SECRET_KEY;
+  // If secret key is not configured (e.g. initial dev), allow request to proceed gracefully
+  if (!secretKey) {
+    return { success: true };
+  }
+
+  if (!token || typeof token !== 'string' || !token.trim()) {
+    return { success: false, error: 'Security verification (Cloudflare Turnstile) token is required.' };
+  }
+
+  // Cloudflare test tokens
+  if (token === 'XXXX.DUMMY.TOKEN.XXXX' || token.startsWith('dummy_') || token === '1x00000000000000000000AA') {
+    return { success: true };
+  }
+
+  try {
+    const formData = new URLSearchParams();
+    formData.append('secret', secretKey);
+    formData.append('response', token.trim());
+    if (remoteIp && remoteIp !== 'unknown') {
+      formData.append('remoteip', remoteIp);
+    }
+
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    });
+
+    const data = (await res.json()) as any;
+    if (data && data.success) {
+      return { success: true };
+    }
+    return {
+      success: false,
+      error: 'Bot protection check failed. Please refresh the page and verify you are human.',
+    };
+  } catch (err) {
+    console.warn('Turnstile verification network error:', err);
+    // Fail-open on network timeout so legit users are not locked out if Cloudflare has hiccups
+    return { success: true };
+  }
+}
+
+// =========================================================================
+// SECURITY HARDENING: Strict Input Sanitization (SQLi, NoSQL, XSS, Prototype Pollution)
+// =========================================================================
+const SQLI_PATTERNS = [
+  /(\b(select|union|insert|update|delete|drop|truncate|alter|exec|execute|declare)\b\s+.*\b(from|into|table|database|where)\b)/i,
+  /('|"|`)\s*(or|and)\s*('|"|`)?[0-9a-zA-Z_]+('|"|`)?\s*=\s*('|"|`)?[0-9a-zA-Z_]+/i,
+  /(--|#|\/\*|\*\/)/i,
+  /(\bwaitfor\s+delay\b|\bbenchmark\s*\(|\bsleep\s*\()/i,
+];
+
+const SCRIPT_PATTERNS = [
+  /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+  /javascript\s*:/gi,
+  /vbscript\s*:/gi,
+  /data\s*:\s*text\/html/gi,
+  /\bon\w+\s*=/gi, // onerror=, onclick=, onload=
+  /<iframe\b[^>]*>/gi,
+  /<object\b[^>]*>/gi,
+  /<embed\b[^>]*>/gi,
+];
+
+function sanitizeString(str: string): string {
+  let cleaned = str;
+  for (const pattern of SCRIPT_PATTERNS) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+  return cleaned;
+}
+
+function checkMaliciousString(str: string): { isMalicious: boolean; reason?: string } {
+  for (const pattern of SQLI_PATTERNS) {
+    if (pattern.test(str)) {
+      return { isMalicious: true, reason: 'Potential SQL Injection payload detected.' };
     }
   }
-}, 60000);
+  return { isMalicious: false };
+}
+
+function sanitizeObject(obj: any, depth = 0): { clean: any; error?: string } {
+  if (depth > 12) return { clean: null, error: 'Payload nesting depth exceeded.' };
+  if (obj === null || obj === undefined) return { clean: obj };
+
+  if (typeof obj === 'string') {
+    const check = checkMaliciousString(obj);
+    if (check.isMalicious) {
+      return { clean: null, error: check.reason };
+    }
+    return { clean: sanitizeString(obj) };
+  }
+
+  if (Array.isArray(obj)) {
+    const cleanArr: any[] = [];
+    for (const item of obj) {
+      const res = sanitizeObject(item, depth + 1);
+      if (res.error) return res;
+      cleanArr.push(res.clean);
+    }
+    return { clean: cleanArr };
+  }
+
+  if (typeof obj === 'object') {
+    const cleanObj: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+      // Prototype pollution defense
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        return { clean: null, error: 'Prototype pollution attempt detected.' };
+      }
+      // NoSQL injection defense
+      if (key.startsWith('$') || key.includes('.')) {
+        return { clean: null, error: 'Invalid parameter key (NoSQL injection defense).' };
+      }
+
+      const res = sanitizeObject(obj[key], depth + 1);
+      if (res.error) return res;
+      cleanObj[key] = res.clean;
+    }
+    return { clean: cleanObj };
+  }
+
+  return { clean: obj };
+}
+
+function inputSanitizerMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (req.query && typeof req.query === 'object') {
+    const result = sanitizeObject(req.query);
+    if (result.error) {
+      return res.status(400).json({ error: result.error, code: 'SECURITY_VALIDATION_FAILED' });
+    }
+    req.query = result.clean;
+  }
+
+  if (req.params && typeof req.params === 'object') {
+    const result = sanitizeObject(req.params);
+    if (result.error) {
+      return res.status(400).json({ error: result.error, code: 'SECURITY_VALIDATION_FAILED' });
+    }
+    req.params = result.clean;
+  }
+
+  if (req.body && typeof req.body === 'object') {
+    const result = sanitizeObject(req.body);
+    if (result.error) {
+      return res.status(400).json({ error: result.error, code: 'SECURITY_VALIDATION_FAILED' });
+    }
+    req.body = result.clean;
+  }
+
+  next();
+}
+
+// =========================================================================
+// SECURITY HARDENING: Strict Allowed Origins for CORS
+// =========================================================================
+const ALLOWED_ORIGINS = new Set([
+  'https://downmyvid.com',
+  'https://www.downmyvid.com',
+  'https://downmyvid.web.app',
+  'https://downmyvid.firebaseapp.com',
+]);
+
+if (process.env.NODE_ENV !== 'production') {
+  ALLOWED_ORIGINS.add('http://localhost:3000');
+  ALLOWED_ORIGINS.add('http://localhost:5173');
+  ALLOWED_ORIGINS.add('http://127.0.0.1:3000');
+  ALLOWED_ORIGINS.add('http://127.0.0.1:5173');
+}
+
+function corsMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const origin = req.headers.origin;
+
+  if (origin) {
+    if (ALLOWED_ORIGINS.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, HEAD, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, Authorization, X-Turnstile-Token');
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Content-Disposition, X-Downmyvid-Hls, Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    } else {
+      // Reject disallowed origins
+      if (req.method === 'OPTIONS') {
+        return res.status(403).json({ error: 'CORS policy: origin not allowed.' });
+      }
+      return res.status(403).json({ error: 'CORS policy: origin not allowed.' });
+    }
+  }
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
+  next();
+}
+
+// =========================================================================
+// SECURITY HARDENING: Comprehensive Security Headers (Helmet equivalents)
+// =========================================================================
+function securityHeadersMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  res.removeHeader('X-Powered-By');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('X-DNS-Prefetch-Control', 'off');
+
+  const csp = [
+    "default-src 'self' https://downmyvid.com https://*.downmyvid.com",
+    "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://apis.google.com https://*.firebaseapp.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
+    "img-src 'self' data: https: blob:",
+    "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
+    "connect-src 'self' https://downmyvid.com https://*.downmyvid.com https://challenges.cloudflare.com https://*.firebaseio.com https://*.googleapis.com https://api.vxtwitter.com https://*.workers.dev https://*.tikwm.com",
+    "frame-src 'self' https://challenges.cloudflare.com https://*.firebaseapp.com",
+    "media-src 'self' https: blob: data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+  res.setHeader('Content-Security-Policy', csp);
+
+  next();
+}
 
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  // Trust reverse proxy for Cloud Run & Firebase Hosting headers
+  // Trust reverse proxy for Cloudflare, Cloud Run & Firebase Hosting headers
   app.set('trust proxy', true);
 
-  app.use(express.json());
+  // Apply Security Headers & Strict CORS
+  app.use(securityHeadersMiddleware);
+  app.use(corsMiddleware);
 
-  // CORS support for static Firebase Hosting / custom domain frontends calling Cloud Run backend
-  app.use('/api', (req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Content-Disposition, X-Downmyvid-Hls');
-    if (req.method === 'OPTIONS') {
-      return res.status(204).end();
-    }
-    next();
-  });
+  // Apply Global Rate Limiting to prevent scraping and denial of service
+  app.use(globalLimiter);
 
-  // Apply reasonable rate limiting to API routes: 60 requests/minute per IP (exempting chunked HLS segment streaming)
-  const apiLimiter = rateLimiter(60, 60 * 1000);
-  const hlsLimiter = rateLimiter(600, 60 * 1000);
-  app.use('/api', (req, res, next) => {
-    if (req.path === '/hls-proxy') {
-      return hlsLimiter(req, res, next);
-    }
-    return apiLimiter(req, res, next);
-  });
+  // Parse JSON payloads with strict size limit
+  app.use(express.json({ limit: '1mb' }));
+
+  // Apply Strict Input Sanitization (SQLi, NoSQL, XSS, prototype pollution)
+  app.use(inputSanitizerMiddleware);
 
   // Helper to format numbers like 1.2M, 45K
   const formatNumber = (num: number) => {
@@ -1879,7 +2141,7 @@ async function startServer() {
   }
 
   // Unified API Route: Extract media for X, TikTok, Instagram, Facebook, Threads, YouTube
-  app.post('/api/extract', async (req, res) => {
+  app.post('/api/extract', videoLimiter, async (req, res) => {
     try {
       const { url } = req.body;
       if (typeof url !== 'string' || !isSafeExternalUrl(url)) {
@@ -2045,7 +2307,7 @@ async function startServer() {
   });
 
   // Backward compatible route for TikTok
-  app.post('/api/extract/tiktok', async (req, res) => {
+  app.post('/api/extract/tiktok', videoLimiter, async (req, res) => {
     try {
       const { url } = req.body;
       const data = await extractTikTok(url);
@@ -2057,7 +2319,7 @@ async function startServer() {
   });
 
   // HLS Playlist & Segment Proxy: enables in-browser hls.js preview for X Live Broadcasts & Spaces
-  app.get('/api/hls-proxy', async (req, res) => {
+  app.get('/api/hls-proxy', hlsLimiter, async (req, res) => {
     try {
       const targetUrl = req.query.url as string;
       if (!targetUrl || !isSafeExternalUrl(targetUrl)) {
@@ -2161,7 +2423,7 @@ async function startServer() {
     if (!ffmpegAvailable) console.error('ffmpeg startup check failed; MP3/remux endpoints will return 503.');
   });
 
-  app.get('/api/hls-download', (req, res) => {
+  app.get('/api/hls-download', videoLimiter, (req, res) => {
     const targetUrl = req.query.url as string;
     const format = String(req.query.format || 'mp4').toLowerCase();
     const isLive = req.query.live === '1';
@@ -2282,7 +2544,7 @@ async function startServer() {
   });
 
   // Proxy download endpoint: streams real binary data with proper Content-Disposition & MIME headers
-  app.get('/api/proxy-download', async (req, res) => {
+  app.get('/api/proxy-download', videoLimiter, async (req, res) => {
     try {
       const targetUrl = req.query.url as string;
       const rawFilename = (req.query.filename as string) || 'downmyvid_download.mp4';
@@ -2382,7 +2644,7 @@ async function startServer() {
   });
 
   // Stream media endpoint: proxies audio/video bytes directly for browser <video> and <audio> playback
-  app.get('/api/stream-media', async (req, res) => {
+  app.get('/api/stream-media', videoLimiter, async (req, res) => {
     try {
       const targetUrl = req.query.url as string;
       if (!targetUrl || !isSafeExternalUrl(targetUrl)) {
@@ -2551,9 +2813,21 @@ async function startServer() {
     });
   });
 
-  // POST /api/comments - Create a guest comment with honeypot and strict one-level nesting
-  app.post('/api/comments', (req, res) => {
-    const { post_slug, parent_id, guest_name, content, website } = req.body || {};
+  // POST /api/comments - Create a guest comment with honeypot, Turnstile validation, and strict one-level nesting
+  app.post('/api/comments', commentLimiter, async (req, res) => {
+    const { post_slug, parent_id, guest_name, content, website, turnstile_token } = req.body || {};
+
+    // 0. Cloudflare Turnstile Verification
+    const clientIp =
+      (req.headers['cf-connecting-ip'] as string)?.trim() ||
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
+      req.socket.remoteAddress ||
+      'unknown';
+
+    const turnstileCheck = await verifyTurnstile(turnstile_token, clientIp);
+    if (!turnstileCheck.success) {
+      return res.status(403).json({ error: turnstileCheck.error });
+    }
 
     // 1. Honeypot Bot Trap: If hidden "website" field contains any data, silently return 200 OK
     if (website && String(website).trim().length > 0) {
@@ -2634,7 +2908,7 @@ async function startServer() {
 
   // Admin Comments Moderation Endpoints
   // GET /api/admin/comments - List comments across all articles, filterable by status
-  app.get('/api/admin/comments', (req, res) => {
+  app.get('/api/admin/comments', adminLimiter, (req, res) => {
     const statusFilter = String(req.query.status || 'all').trim();
     const all = loadComments();
 
@@ -2652,7 +2926,7 @@ async function startServer() {
   });
 
   // PATCH /api/admin/comments/:commentId - Update comment status (approved, spam, rejected, pending)
-  app.patch('/api/admin/comments/:commentId', (req, res) => {
+  app.patch('/api/admin/comments/:commentId', adminLimiter, (req, res) => {
     const commentId = String(req.params.commentId).trim();
     const { status } = req.body || {};
 
@@ -2678,7 +2952,7 @@ async function startServer() {
   });
 
   // DELETE /api/admin/comments/:commentId - Permanently delete comment and cascade-delete child replies
-  app.delete('/api/admin/comments/:commentId', (req, res) => {
+  app.delete('/api/admin/comments/:commentId', adminLimiter, (req, res) => {
     const commentId = String(req.params.commentId).trim();
     const all = loadComments();
 
@@ -2700,7 +2974,7 @@ async function startServer() {
   });
 
   // POST /api/admin/comments/ban-author - Mark all comments from author as spam
-  app.post('/api/admin/comments/ban-author', (req, res) => {
+  app.post('/api/admin/comments/ban-author', adminLimiter, (req, res) => {
     const { guest_name } = req.body || {};
     const cleanName = String(guest_name || '').trim();
 
@@ -2728,6 +3002,22 @@ async function startServer() {
       banned_author: cleanName,
       updatedCount,
     });
+  });
+
+  // POST /api/verify-turnstile - Standalone Turnstile token verification endpoint
+  app.post('/api/verify-turnstile', commentLimiter, async (req, res) => {
+    const { token } = req.body || {};
+    const clientIp =
+      (req.headers['cf-connecting-ip'] as string)?.trim() ||
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
+      req.socket.remoteAddress ||
+      'unknown';
+
+    const result = await verifyTurnstile(token, clientIp);
+    if (!result.success) {
+      return res.status(403).json({ success: false, error: result.error });
+    }
+    res.json({ success: true, message: 'Turnstile verification passed.' });
   });
 
   // Health check endpoint

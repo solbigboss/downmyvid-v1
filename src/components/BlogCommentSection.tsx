@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   X,
   Loader2,
+  ShieldAlert,
 } from 'lucide-react';
 import { BlogComment, Language } from '../types';
 import {
@@ -19,6 +20,7 @@ import {
   fetchReplies,
   submitComment,
 } from '../services/commentService';
+import { TurnstileWidget } from './TurnstileWidget';
 
 interface BlogCommentSectionProps {
   postSlug: string;
@@ -90,11 +92,25 @@ export const BlogCommentSection: React.FC<BlogCommentSectionProps> = ({
   const [guestName, setGuestName] = useState<string>('');
   const [content, setContent] = useState<string>('');
   const [honeypot, setHoneypot] = useState<string>(''); // Hidden bot trap field
+  const [turnstileToken, setTurnstileToken] = useState<string>('');
+  const [rateLimitCountdown, setRateLimitCountdown] = useState<number | null>(null);
   const [replyingTo, setReplyingTo] = useState<{
     id: string;
     guestName: string;
     rootParentId: string;
   } | null>(null);
+
+  // Rate limit countdown timer
+  useEffect(() => {
+    if (rateLimitCountdown === null || rateLimitCountdown <= 0) return;
+    const timer = window.setInterval(() => {
+      setRateLimitCountdown((prev) => {
+        if (prev === null || prev <= 1) return null;
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [rateLimitCountdown]);
 
   // Lazy-loaded replies state: Map of commentId -> { replies: BlogComment[], expanded: boolean, loading: boolean }
   const [repliesState, setRepliesState] = useState<
@@ -165,11 +181,13 @@ export const BlogCommentSection: React.FC<BlogCommentSectionProps> = ({
         guest_name: guestName.trim() || 'Anonymous',
         content: replyingTo ? `@${replyingTo.guestName} ${trimmedContent}` : trimmedContent,
         website: honeypot, // Honeypot trap
+        turnstile_token: turnstileToken,
       });
 
       if (res.success) {
         setContent('');
         setHoneypot('');
+        setTurnstileToken('');
         setSuccessNotice(
           res.message ||
             (isRtl ? 'تم نشر تعليقك بنجاح!' : 'Your comment has been posted!')
@@ -215,11 +233,29 @@ export const BlogCommentSection: React.FC<BlogCommentSectionProps> = ({
       }
     } catch (err) {
       console.error('Error posting comment:', err);
-      setErrorNotice(
-        isRtl
-          ? 'حدث خطأ أثناء إرسال التعليق. يرجى المحاولة لاحقاً.'
-          : 'An error occurred while posting your comment.'
-      );
+      const isRateLimited =
+        err instanceof Error &&
+        (err.message.includes('Rate limit') ||
+          err.message.includes('Too many requests') ||
+          err.message.includes('slow down') ||
+          err.message.includes('429'));
+
+      if (isRateLimited) {
+        setRateLimitCountdown(60);
+        setErrorNotice(
+          isRtl
+            ? '⏳ تم تفعيل حماية الأمان: تم الوصول إلى حد التعليقات المسموح به. يرجى الانتظار 60 ثانية.'
+            : '⏳ Security Shield: Rate limit reached. Please wait 60s before commenting again.'
+        );
+      } else {
+        setErrorNotice(
+          err instanceof Error && err.message
+            ? err.message
+            : isRtl
+            ? 'حدث خطأ أثناء إرسال التعليق. يرجى المحاولة لاحقاً.'
+            : 'An error occurred while posting your comment.'
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -435,6 +471,32 @@ export const BlogCommentSection: React.FC<BlogCommentSectionProps> = ({
             autoComplete="off"
           />
         </div>
+
+        {/* Rate Limit Active Warning Banner */}
+        {rateLimitCountdown !== null && (
+          <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/15 to-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-3 shadow-[0_4px_16px_rgba(245,158,11,0.2),inset_0px_1px_1px_rgba(255,255,255,0.1)] backdrop-blur-md animate-in fade-in duration-200">
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+              <ShieldAlert className="w-4 h-4 animate-pulse" />
+            </div>
+            <div>
+              <p className="font-bold text-amber-200">
+                {isRtl ? 'حماية الأمان نشطة (حد الطلبات)' : 'Security Shield Rate Limiter Active'}
+              </p>
+              <p className="text-[11px] text-amber-300/80 mt-0.5">
+                {isRtl
+                  ? `يرجى الانتظار ${rateLimitCountdown} ثانية قبل إرسال تعليق آخر.`
+                  : `Please wait ${rateLimitCountdown}s before posting another comment.`}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Cloudflare Turnstile Human Verification */}
+        <TurnstileWidget
+          onVerify={(token) => setTurnstileToken(token)}
+          onExpire={() => setTurnstileToken('')}
+          theme="auto"
+        />
 
         {/* Submit Bar with 3D Popping Button */}
         <div className="flex items-center justify-between gap-3 pt-1">

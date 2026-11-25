@@ -193,7 +193,20 @@ export async function submitComment(
         message: data.message || 'Comment posted successfully!',
       };
     }
+
+    if (res.status === 429) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.message || 'Rate limit reached: Please wait a moment before posting another comment.');
+    }
+
+    if (res.status === 403) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error || 'Security verification failed. Please complete the Turnstile challenge.');
+    }
   } catch (apiErr) {
+    if (apiErr instanceof Error && (apiErr.message.includes('Rate limit') || apiErr.message.includes('Security verification') || apiErr.message.includes('Turnstile'))) {
+      throw apiErr;
+    }
     console.warn('API /api/comments POST failed, falling back to Firestore client write:', apiErr);
   }
 

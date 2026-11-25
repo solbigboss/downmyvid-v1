@@ -5,6 +5,7 @@ import {
   X,
   Sparkles,
   AlertCircle,
+  ShieldAlert,
   Film,
   Radio,
   Mic,
@@ -521,10 +522,24 @@ export const HeroInput: React.FC<HeroInputProps> = ({
           )}
 
           {displayedError && (
-            <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-xs text-red-600 dark:text-red-400 font-medium flex items-center gap-2 text-left rtl:text-right animate-in fade-in duration-200">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{displayedError}</span>
-            </div>
+            displayedError.toLowerCase().includes('rate limit') ||
+            displayedError.toLowerCase().includes('too many requests') ||
+            displayedError.toLowerCase().includes('slow down') ? (
+              <div className="mt-3 p-3.5 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-500/30 rounded-2xl text-xs text-amber-300 font-medium flex items-center gap-3 text-left rtl:text-right shadow-[0_4px_16px_rgba(245,158,11,0.15),inset_0px_1px_1px_rgba(255,255,255,0.1)] backdrop-blur-md animate-in fade-in duration-200">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm shrink-0">
+                  <ShieldAlert className="w-4 h-4 animate-pulse" />
+                </div>
+                <div>
+                  <p className="font-bold text-amber-200">Security Shield Rate Limit</p>
+                  <p className="text-[11px] text-amber-300/80 mt-0.5">{displayedError}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-xs text-red-600 dark:text-red-400 font-medium flex items-center gap-2 text-left rtl:text-right animate-in fade-in duration-200">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{displayedError}</span>
+              </div>
+            )
           )}
         </form>
 

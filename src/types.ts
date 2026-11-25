@@ -78,4 +78,5 @@ export interface CreateCommentDTO {
   guest_name?: string;
   content: string;
   website?: string; // Honeypot field for bot trapping
+  turnstile_token?: string; // Cloudflare Turnstile token for verification
 }

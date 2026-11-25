@@ -140,8 +140,13 @@ export default {
     if (origin) headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Vary', 'Origin');
     headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Range');
-    headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Content-Disposition, Accept-Ranges');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Range, Authorization, X-Turnstile-Token');
+    headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Content-Disposition, Accept-Ranges, Retry-After');
+    headers.set('X-Content-Type-Options', 'nosniff');
+    headers.set('X-Frame-Options', 'DENY');
+    headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+    headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
     return new Response(response.body, { status: response.status, headers });
   },
 };
