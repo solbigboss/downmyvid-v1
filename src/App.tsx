@@ -18,6 +18,8 @@ import { QrCodeModal } from './components/QrCodeModal';
 import { Footer } from './components/Footer';
 import { BlogView } from './components/BlogView';
 import { BlogAdminView } from './components/BlogAdminView';
+import { TermsView } from './components/TermsView';
+import { PrivacyView } from './components/PrivacyView';
 import { Language, ActiveTab, TweetMediaData, MediaFormat, DownloadHistoryItem, ThemeMode } from './types';
 import { extractMedia } from './services/mediaExtractor';
 
@@ -35,6 +37,8 @@ const TAB_PATHS: Record<ActiveTab, string> = {
   youtube: '/youtube-video-downloader',
   blog: '/blog',
   admin: '/admin',
+  terms: '/terms',
+  privacy: '/privacy',
 };
 
 function blogSlugFromPath(pathname: string): string | undefined {
@@ -56,6 +60,8 @@ function tabFromPath(pathname: string): ActiveTab {
   routeTabs['/tiktok'] = 'tiktok';
   routeTabs['/threads'] = 'threads';
   routeTabs['/youtube'] = 'youtube';
+  routeTabs['/terms-of-service'] = 'terms';
+  routeTabs['/privacy-policy'] = 'privacy';
   return routeTabs[path] || 'home';
 }
 
@@ -109,7 +115,7 @@ export default function App() {
   const [blogSlug, setBlogSlug] = useState<string | undefined>(() => blogSlugFromPath(window.location.pathname));
   const [addressBarUrl] = useState(() => {
     const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
-    const blocked = new Set(['guides', 'history', 'instagram', 'tiktok', 'facebook', 'threads', 'mp3', 'batch', 'faq', 'blog', 'admin', 'x-video-downloader', 'instagram-video-downloader', 'facebook-video-downloader', 'tiktok-downloader', 'threads-downloader']);
+    const blocked = new Set(['guides', 'history', 'instagram', 'tiktok', 'facebook', 'threads', 'mp3', 'batch', 'faq', 'blog', 'admin', 'terms', 'privacy', 'terms-of-service', 'privacy-policy', 'x-video-downloader', 'instagram-video-downloader', 'facebook-video-downloader', 'tiktok-downloader', 'threads-downloader']);
     const match = path.match(/^([^/]+)\/status\/(\d+)$/i);
     return match && !blocked.has(match[1].toLowerCase()) ? `https://x.com/${match[1]}/status/${match[2]}` : '';
   });
@@ -182,6 +188,14 @@ export default function App() {
         title: 'X Video Downloader | DownMyVid',
         description: 'Download public X/Twitter videos in the formats offered by the source.',
       },
+      '/terms': {
+        title: 'Terms of Service | DownMyVid',
+        description: 'Terms and conditions for using DownMyVid public video downloader services.',
+      },
+      '/privacy': {
+        title: 'Privacy Policy | DownMyVid',
+        description: 'Learn about DownMyVid zero-tracking, zero-logs privacy-first commitment.',
+      },
     };
     const tabMetadata: Partial<Record<ActiveTab, { title: string; description: string }>> = {
       home: {
@@ -190,6 +204,8 @@ export default function App() {
       },
       instagram: titles['/instagram-video-downloader'],
       facebook: titles['/facebook-video-downloader'],
+      terms: titles['/terms'],
+      privacy: titles['/privacy'],
     };
     const blogSlug = blogSlugFromPath(window.location.pathname);
     const metadata = blogSlug
@@ -413,7 +429,25 @@ export default function App() {
 
       {/* Main Content Area based on Active Tab */}
       <main className="flex-1">
-        {activeTab === 'blog' ? (
+        {activeTab === 'terms' ? (
+          <TermsView
+            currentLang={currentLang}
+            onBackToHome={() => {
+              resetExtractionState();
+              navigateToTab('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        ) : activeTab === 'privacy' ? (
+          <PrivacyView
+            currentLang={currentLang}
+            onBackToHome={() => {
+              resetExtractionState();
+              navigateToTab('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        ) : activeTab === 'blog' ? (
           <BlogView
             slug={blogSlug}
             currentLang={currentLang}

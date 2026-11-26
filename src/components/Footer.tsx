@@ -180,9 +180,27 @@ export const Footer: React.FC<FooterProps> = ({
             © {new Date().getFullYear()} Downmyvid. All rights reserved.
           </div>
           <div className="flex items-center gap-4">
-            <a href="#terms" className="hover:text-[#0f1419] dark:hover:text-white transition-colors">{t.terms}</a>
+            <a
+              href="/terms"
+              onClick={(e) => {
+                e.preventDefault();
+                onSelectTab('terms');
+              }}
+              className="hover:text-[#0f1419] dark:hover:text-white transition-colors cursor-pointer"
+            >
+              {t.terms}
+            </a>
             <span>·</span>
-            <a href="#privacy" className="hover:text-[#0f1419] dark:hover:text-white transition-colors">{t.privacy}</a>
+            <a
+              href="/privacy"
+              onClick={(e) => {
+                e.preventDefault();
+                onSelectTab('privacy');
+              }}
+              className="hover:text-[#0f1419] dark:hover:text-white transition-colors cursor-pointer"
+            >
+              {t.privacy}
+            </a>
           </div>
         </div>
       </div>

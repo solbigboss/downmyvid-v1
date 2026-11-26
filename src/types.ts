@@ -6,7 +6,7 @@ export type PlatformType = 'x' | 'instagram' | 'tiktok' | 'facebook' | 'threads'
 
 export type XDownloadCategory = 'video' | 'stream' | 'spaces';
 
-export type ActiveTab = 'home' | 'mp3' | 'batch' | 'guides' | 'faq' | 'history' | 'instagram' | 'tiktok' | 'facebook' | 'threads' | 'youtube' | 'blog' | 'admin';
+export type ActiveTab = 'home' | 'mp3' | 'batch' | 'guides' | 'faq' | 'history' | 'instagram' | 'tiktok' | 'facebook' | 'threads' | 'youtube' | 'blog' | 'admin' | 'terms' | 'privacy';
 
 export interface MediaFormat {
   id: string;
