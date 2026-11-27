@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Final 2026-11-27: 44 URLs = 10 static pages (incl. terms/privacy) + 34 articles. Built from sitemap-2026-11-27.xml + artists-quitting (Nov 26 21:00) + terms/privacy (lastmod 2026-11-26). -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://downmyvid.com/</loc>
-    <lastmod>2026-11-21</lastmod>
+    <lastmod>2026-11-27</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -44,9 +45,21 @@
   </url>
   <url>
     <loc>https://downmyvid.com/blog</loc>
-    <lastmod>2026-11-21</lastmod>
+    <lastmod>2026-11-27</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/terms</loc>
+    <lastmod>2026-11-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/privacy</loc>
+    <lastmod>2026-11-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
   <url>
     <loc>https://downmyvid.com/blog/gta-6-release-date-hype-reactions</loc>
@@ -69,6 +82,186 @@
   <url>
     <loc>https://downmyvid.com/blog/x-clipping-pays-creators-and-clippers</loc>
     <lastmod>2026-11-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/protesters-storm-meta-offices-in-india-over-instagram-bans</loc>
+    <lastmod>2026-11-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/riemann-hypothesis-proof-claude-1m-math-problem</loc>
+    <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/bitcoin-rebounds-past-60k-after-brutal-market-week</loc>
+    <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/gta-6-launch-emptied-schools-and-offices-worldwide</loc>
+    <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/tiktok-likeness-detection-ai-clones-flagged</loc>
+    <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/etsy-sellers-quit-over-ai-training-terms</loc>
+    <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/ai-agents-found-zero-day-11-minutes</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/gta-6-first-post-launch-update-is-live-no-patch-notes</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/bitcoin-seven-week-losing-streak-second-longest-ever</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/instagram-stories-can-finally-be-edited-after-posting</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/doomscrolling-global-health-threat-experts-warn</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/nvidia-reinstates-jensen-huang-ceo</loc>
+    <lastmod>2026-11-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/gta-6-hits-39-million-ps5-players-in-four-days</loc>
+    <lastmod>2026-11-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/bitcoin-etf-outflows-hit-record-4-71b-november</loc>
+    <lastmod>2026-11-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/instagram-edits-hits-ipad-bigger-canvas</loc>
+    <lastmod>2026-11-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/avengers-doomsday-final-trailer-fans-lost-it</loc>
+    <lastmod>2026-11-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/gpt-6-designed-proteins-that-worked-in-the-lab</loc>
+    <lastmod>2026-11-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/take-two-kills-gta-6-pc-port-project-leonida</loc>
+    <lastmod>2026-11-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/tariffs-wipe-out-mondays-market-rally-in-a-day</loc>
+    <lastmod>2026-11-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/instagram-content-protection-catches-reel-thieves</loc>
+    <lastmod>2026-11-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/two-states-sue-spacex-over-grok-deepfake-images</loc>
+    <lastmod>2026-11-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/spacex-green-light-1-million-ai-satellites</loc>
+    <lastmod>2026-11-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/fc-27-brings-back-john-motson-with-ai-voice</loc>
+    <lastmod>2026-11-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/bitcoin-back-above-60000-after-wednesdays-wild-rebound</loc>
+    <lastmod>2026-11-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/x-video-editor-arrives-with-a-creator-bonus</loc>
+    <lastmod>2026-11-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/artists-quitting-instagram-over-meta-ai-terms</loc>
+    <lastmod>2026-11-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/deepl-aure-v2-cuts-live-translation-delay-half</loc>
+    <lastmod>2026-11-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/silksong-dlc-news-today-team-cherrys-cherry-time</loc>
+    <lastmod>2026-11-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/bitcoin-ends-seven-week-losing-streak-as-stocks-rally</loc>
+    <lastmod>2026-11-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/tiktok-likeness-detection-rolls-out-globally</loc>
+    <lastmod>2026-11-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
