@@ -3,7 +3,9 @@ import {
   AlignCenter, AlignLeft, AlignRight, Bold, Heading1, Heading2, ImagePlus, Italic,
   Link as LinkIcon, List, LoaderCircle, LogIn, LogOut, Plus, Redo2, Save, Trash2, Undo2,
   FileText, MessageSquare, CheckCircle, XCircle, Ban, ShieldAlert, Search, RefreshCw,
-  ExternalLink, CornerDownRight, Clock
+  ExternalLink, CornerDownRight, Clock,
+  X, Layers, Newspaper, TrendingUp, Sparkles, Gamepad2, Tag, ChevronLeft, ChevronRight,
+  ChevronsLeft, ChevronsRight, Edit3, ArrowRight, Check, SlidersHorizontal
 } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, loginWithGoogle, logoutUser } from '../firebase';
@@ -23,6 +25,83 @@ const blank = { slug: '', title: '', excerpt: '', body: '', imageUrl: '', catego
 
 function makeSlug(value: string) {
   return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 90);
+}
+
+function highlightMatch(text: string, query: string) {
+  if (!query.trim()) return <>{text}</>;
+  const trimmed = query.trim();
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  const parts = text.split(regex);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === trimmed.toLowerCase() ? (
+          <mark key={i} className="bg-[#1d9bf0]/30 text-[#78c5f8] dark:text-cyan-300 font-black px-0.5 rounded">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
+function getNicheTheme(niche: string = '') {
+  const n = niche.toLowerCase().trim();
+  if (n === 'ai' || n.includes('ai') || n.includes('artificial') || n.includes('intelligence')) {
+    return {
+      label: 'AI',
+      badge: 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30',
+      activeGradient: 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.4)]',
+      icon: Sparkles,
+      dot: 'bg-cyan-400',
+    };
+  }
+  if (n === 'finance' || n.includes('finance') || n.includes('crypto') || n.includes('bitcoin') || n.includes('stock')) {
+    return {
+      label: 'Finance',
+      badge: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
+      activeGradient: 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]',
+      icon: TrendingUp,
+      dot: 'bg-emerald-400',
+    };
+  }
+  if (n === 'games' || n.includes('game') || n.includes('gaming')) {
+    return {
+      label: 'Games',
+      badge: 'bg-purple-500/15 text-purple-400 border border-purple-500/30',
+      activeGradient: 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]',
+      icon: Gamepad2,
+      dot: 'bg-purple-400',
+    };
+  }
+  if (n === 'news' || n.includes('news')) {
+    return {
+      label: 'News',
+      badge: 'bg-sky-500/15 text-sky-400 border border-sky-500/30',
+      activeGradient: 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-[0_0_15px_rgba(14,165,233,0.4)]',
+      icon: Newspaper,
+      dot: 'bg-sky-400',
+    };
+  }
+  if (n === 'all') {
+    return {
+      label: 'All Niches',
+      badge: 'bg-slate-800 text-slate-300 border border-white/10',
+      activeGradient: 'bg-gradient-to-r from-[#1d9bf0] to-[#007bff] text-white shadow-[0_0_15px_rgba(29,155,240,0.4)]',
+      icon: Layers,
+      dot: 'bg-[#1d9bf0]',
+    };
+  }
+  return {
+    label: niche || 'Other',
+    badge: 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30',
+    activeGradient: 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]',
+    icon: Tag,
+    dot: 'bg-indigo-400',
+  };
 }
 
 interface BlogAdminViewProps { currentLang: Language; }
@@ -46,6 +125,15 @@ export const BlogAdminView: React.FC<BlogAdminViewProps> = ({ currentLang }) => 
   const fileRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
+  // Articles Search, Filtering by Niches & Pagination State
+  const [postSearch, setPostSearch] = useState('');
+  const [postCategory, setPostCategory] = useState<string>('all');
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
   // Comments Moderation State
   const [comments, setComments] = useState<BlogComment[]>([]);
   const [commentFilter, setCommentFilter] = useState<'all' | CommentStatus>('all');
@@ -54,6 +142,17 @@ export const BlogAdminView: React.FC<BlogAdminViewProps> = ({ currentLang }) => 
   const [commentActionId, setCommentActionId] = useState<string | null>(null);
 
   useEffect(() => onAuthStateChanged(auth, setUser), []);
+
+  // Dismiss suggestions on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
 
   const updateBody = (nextBody: string) => {
     setUndoStack(stack => [...stack.slice(-99), form.body]);
@@ -242,6 +341,96 @@ export const BlogAdminView: React.FC<BlogAdminViewProps> = ({ currentLang }) => 
     return true;
   });
 
+  // Article Niches: Standard requested niches plus any custom categories from existing posts
+  const standardNiches = ['all', 'News', 'Finance', 'AI', 'Games'];
+  const dynamicNiches = Array.from(
+    new Set(
+      posts
+        .map(p => (p.category || '').trim())
+        .filter(c => Boolean(c) && !['news', 'finance', 'ai', 'games'].includes(c.toLowerCase()))
+    )
+  );
+  const availableNiches = [...standardNiches, ...dynamicNiches];
+
+  const getNicheCount = (niche: string) => {
+    if (niche === 'all') return posts.length;
+    const target = niche.toLowerCase();
+    return posts.filter(p => {
+      const cat = (p.category || '').trim().toLowerCase();
+      if (target === 'ai') return cat === 'ai' || cat.includes('ai') || cat.includes('artificial');
+      if (target === 'games') return cat === 'games' || cat.includes('game');
+      if (target === 'finance') return cat === 'finance' || cat.includes('finance') || cat.includes('crypto') || cat.includes('bitcoin');
+      if (target === 'news') return cat === 'news' || cat.includes('news');
+      return cat === target;
+    }).length;
+  };
+
+  const filteredPosts = posts.filter(post => {
+    // 1. Niche / Category filter
+    if (postCategory !== 'all') {
+      const cat = (post.category || '').trim().toLowerCase();
+      const target = postCategory.toLowerCase();
+      let matches = false;
+      if (target === 'ai') {
+        matches = cat === 'ai' || cat.includes('ai') || cat.includes('artificial');
+      } else if (target === 'games') {
+        matches = cat === 'games' || cat.includes('game');
+      } else if (target === 'finance') {
+        matches = cat === 'finance' || cat.includes('finance') || cat.includes('crypto') || cat.includes('bitcoin');
+      } else if (target === 'news') {
+        matches = cat === 'news' || cat.includes('news');
+      } else {
+        matches = cat === target;
+      }
+      if (!matches) return false;
+    }
+
+    // 2. Search query filter
+    if (postSearch.trim()) {
+      const q = postSearch.trim().toLowerCase();
+      const matchTitle = (post.title || '').toLowerCase().includes(q);
+      const matchSlug = (post.slug || '').toLowerCase().includes(q);
+      const matchCat = (post.category || '').toLowerCase().includes(q);
+      const matchExcerpt = (post.excerpt || '').toLowerCase().includes(q);
+      return matchTitle || matchSlug || matchCat || matchExcerpt;
+    }
+
+    return true;
+  });
+
+  // Live suggestions when typing in search bar (top 6 matches)
+  const searchSuggestions = postSearch.trim()
+    ? posts.filter(post => {
+        const q = postSearch.trim().toLowerCase();
+        return (
+          (post.title || '').toLowerCase().includes(q) ||
+          (post.slug || '').toLowerCase().includes(q) ||
+          (post.category || '').toLowerCase().includes(q)
+        );
+      }).slice(0, 6)
+    : [];
+
+  // Pagination calculation
+  const totalPages = Math.max(1, Math.ceil(filteredPosts.length / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const paginatedPosts = filteredPosts.slice(startIndex, startIndex + pageSize);
+
+  const getPageNumbers = (current: number, total: number) => {
+    if (total <= 6) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const pages: (number | string)[] = [];
+    if (current <= 3) {
+      pages.push(1, 2, 3, 4, '...', total);
+    } else if (current >= total - 2) {
+      pages.push(1, '...', total - 3, total - 2, total - 1, total);
+    } else {
+      pages.push(1, '...', current - 1, current, current + 1, '...', total);
+    }
+    return pages;
+  };
+
   return (
     <section dir={isRtl ? 'rtl' : 'ltr'} className={`max-w-6xl mx-auto px-4 py-10 ${isRtl ? 'font-[Cairo]' : ''}`}>
       {/* Top Header */}
@@ -304,7 +493,7 @@ export const BlogAdminView: React.FC<BlogAdminViewProps> = ({ currentLang }) => 
 
       {/* TAB 1: ARTICLES MANAGEMENT */}
       {activeTab === 'posts' && (
-        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
           <form onSubmit={onSave} className="space-y-4 rounded-3xl border border-[#cfd9de] dark:border-[#2f3336] bg-white dark:bg-[#15202b] p-5 sm:p-7 shadow-lg">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black">{editingId ? copy.editPost : copy.newPost}</h2>
@@ -318,9 +507,34 @@ export const BlogAdminView: React.FC<BlogAdminViewProps> = ({ currentLang }) => 
             <label className="block text-sm font-bold">{copy.slugField}
               <input required value={form.slug} onChange={e => setForm({ ...form, slug: makeSlug(e.target.value) })} className="mt-1 w-full rounded-xl border bg-transparent px-3 py-2.5" maxLength={90} />
             </label>
-            <label className="block text-sm font-bold">{copy.categoryField}
-              <input required value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="Games, News, Finance" className="mt-1 w-full rounded-xl border bg-transparent px-3 py-2.5" maxLength={40} />
-            </label>
+            <div>
+              <label className="block text-sm font-bold">{copy.categoryField}
+                <input required value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="News, Finance, AI, Games" list="niche-suggestions" className="mt-1 w-full rounded-xl border bg-transparent px-3 py-2.5" maxLength={40} />
+                <datalist id="niche-suggestions">
+                  <option value="News" />
+                  <option value="Finance" />
+                  <option value="AI" />
+                  <option value="Games" />
+                </datalist>
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <span className="text-[10px] uppercase font-bold text-slate-500">Quick niche:</span>
+                {['News', 'Finance', 'AI', 'Games'].map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, category: cat }))}
+                    className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all ${
+                      form.category.toLowerCase() === cat.toLowerCase()
+                        ? 'bg-[#1d9bf0] text-white shadow-sm'
+                        : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="block text-sm font-bold">{copy.excerptField}
               <textarea required value={form.excerpt} onChange={e => setForm({ ...form, excerpt: e.target.value })} className="mt-1 w-full rounded-xl border bg-transparent px-3 py-2.5" rows={3} maxLength={300} />
             </label>
@@ -365,22 +579,387 @@ export const BlogAdminView: React.FC<BlogAdminViewProps> = ({ currentLang }) => 
             </button>
           </form>
 
-          {/* Existing Posts List */}
-          <aside className="space-y-3">
-            <h2 className="text-xl font-black">{copy.existingPosts}</h2>
-            {loading && <p className="text-sm text-[#536471]">{copy.loading}</p>}
-            {posts.map(post => (
-              <div key={post.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 dark:bg-[#15202b] p-3 shadow-sm">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-bold text-slate-900 dark:text-white">{post.title}</p>
-                  <p className="text-xs text-[#536471] dark:text-[#8899a6]">{post.published ? copy.published : copy.draft} · /blog/{post.slug}</p>
-                </div>
-                <button onClick={() => edit(post)} className="text-sm font-bold text-[#1d9bf0] hover:underline">Edit</button>
-                <button onClick={() => void onDelete(post)} aria-label={`Delete ${post.title}`} className="p-2 text-red-500 hover:text-red-400">
-                  <Trash2 className="w-4 h-4" />
-                </button>
+          {/* Existing Posts List with Search, Niches Filter, Auto-suggestions & Pagination */}
+          <aside className="space-y-4">
+            {/* Header with Counter and Refresh */}
+            <div className="flex items-center justify-between pb-1">
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  {copy.existingPosts}
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-gradient-to-r from-[#1d9bf0] to-[#007bff] text-white shadow-[0_2px_8px_rgba(29,155,240,0.4)]">
+                    {posts.length}
+                  </span>
+                </h2>
               </div>
-            ))}
+              <button
+                type="button"
+                onClick={() => void refreshPosts()}
+                disabled={loading}
+                title="Refresh articles"
+                className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:border-cyan-500/40 transition-all duration-200 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+              </button>
+            </div>
+
+            {/* Search Bar Container with Live Auto-suggestions */}
+            <div ref={searchContainerRef} className="relative z-30">
+              <div className="relative group">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#1d9bf0] transition-colors" />
+                <input
+                  type="text"
+                  placeholder="Search articles by title, slug, niche..."
+                  value={postSearch}
+                  onFocus={() => setShowSuggestions(true)}
+                  onChange={e => {
+                    setPostSearch(e.target.value);
+                    setCurrentPage(1);
+                    setShowSuggestions(true);
+                  }}
+                  className="w-full bg-[#0b111e] border border-white/10 rounded-2xl pl-10 pr-9 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#1d9bf0] focus:ring-2 focus:ring-[#1d9bf0]/20 shadow-[inset_0px_2px_4px_rgba(0,0,0,0.6)] transition-all"
+                />
+                {postSearch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPostSearch('');
+                      setShowSuggestions(false);
+                      setCurrentPage(1);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Auto-suggested Articles Dropdown */}
+              {showSuggestions && postSearch.trim() && (
+                <div className="absolute left-0 right-0 top-full mt-2 rounded-2xl bg-[#0b111e]/95 backdrop-blur-xl border border-cyan-500/30 shadow-[0_15px_40px_rgba(0,0,0,0.8),0_0_20px_rgba(29,155,240,0.15)] p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="px-3 py-1.5 flex items-center justify-between text-[11px] font-bold text-slate-400 border-b border-white/5">
+                    <span className="flex items-center gap-1.5 text-cyan-400">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Suggested Articles ({searchSuggestions.length})
+                    </span>
+                    <span className="text-[10px] text-slate-500">Click to edit</span>
+                  </div>
+
+                  {searchSuggestions.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-400">
+                      No articles matching "<strong className="text-white">{postSearch}</strong>"
+                    </div>
+                  ) : (
+                    <div className="max-h-64 overflow-y-auto divide-y divide-white/5 mt-1">
+                      {searchSuggestions.map(suggestion => {
+                        const theme = getNicheTheme(suggestion.category);
+                        const Icon = theme.icon;
+                        return (
+                          <div
+                            key={suggestion.id}
+                            onClick={() => {
+                              edit(suggestion);
+                              setShowSuggestions(false);
+                              setHighlightedPostId(suggestion.id);
+                              setTimeout(() => setHighlightedPostId(null), 3000);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="p-2.5 rounded-xl hover:bg-white/5 cursor-pointer transition-all flex items-start gap-2.5 group"
+                          >
+                            <div className={`mt-0.5 p-1 rounded-lg ${theme.badge} shrink-0`}>
+                              <Icon className="w-3 h-3" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors line-clamp-1">
+                                {highlightMatch(suggestion.title, postSearch)}
+                              </p>
+                              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
+                                <span className="truncate">/blog/{suggestion.slug}</span>
+                                <span>·</span>
+                                <span className={suggestion.published ? 'text-emerald-400 font-semibold' : 'text-amber-400'}>
+                                  {suggestion.published ? 'Published' : 'Draft'}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="shrink-0 p-1 rounded-lg bg-[#1d9bf0]/10 text-[#1d9bf0] opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold flex items-center gap-1"
+                            >
+                              <Edit3 className="w-3 h-3" /> Edit
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Filter by Niche / Category */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <span className="flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-3 h-3 text-[#1d9bf0]" /> Filter by Niche / Category
+                </span>
+                {postCategory !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => { setPostCategory('all'); setCurrentPage(1); }}
+                    className="text-[#1d9bf0] hover:underline text-[10px] font-bold normal-case"
+                  >
+                    Reset filter
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {availableNiches.map(niche => {
+                  const theme = getNicheTheme(niche);
+                  const Icon = theme.icon;
+                  const isSelected = postCategory.toLowerCase() === niche.toLowerCase();
+                  const count = getNicheCount(niche);
+
+                  return (
+                    <button
+                      key={niche}
+                      type="button"
+                      onClick={() => {
+                        setPostCategory(niche);
+                        setCurrentPage(1);
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
+                        isSelected
+                          ? `${theme.activeGradient} scale-105 shadow-md`
+                          : 'bg-[#0f172a] text-slate-400 hover:text-white hover:bg-white/5 border border-white/10'
+                      }`}
+                    >
+                      <Icon className="w-3 h-3" />
+                      <span>{theme.label}</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                        isSelected ? 'bg-black/30 text-white' : 'bg-white/10 text-slate-400'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Top Controls: Range Count & Page Size Selector (10, 25, 50, 100) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-white/5 text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <span>
+                  Showing <strong className="text-white">{filteredPosts.length === 0 ? 0 : startIndex + 1}–{Math.min(startIndex + pageSize, filteredPosts.length)}</strong> of <strong className="text-white">{filteredPosts.length}</strong>
+                </span>
+                {(postSearch || postCategory !== 'all') && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 font-semibold">
+                    Filtered
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 bg-[#0b111e] border border-white/10 rounded-xl p-1 shadow-inner self-start sm:self-auto">
+                <span className="text-[10px] uppercase font-bold text-slate-500 px-1">Per page:</span>
+                {[10, 25, 50, 100].map(size => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => {
+                      setPageSize(size);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-2.5 py-0.5 rounded-lg text-xs font-black transition-all duration-150 ${
+                      pageSize === size
+                        ? 'bg-gradient-to-r from-[#1d9bf0] to-[#007bff] text-white shadow-[0_2px_8px_rgba(29,155,240,0.5)] scale-105'
+                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Articles List (Max 10 / selected pageSize per page) */}
+            <div className="space-y-2.5 min-h-[300px]">
+              {loading && (
+                <div className="py-12 text-center text-slate-400">
+                  <LoaderCircle className="w-6 h-6 animate-spin mx-auto text-[#1d9bf0] mb-2" />
+                  <p className="text-xs">{copy.loading}</p>
+                </div>
+              )}
+
+              {!loading && paginatedPosts.length === 0 && (
+                <div className="py-12 text-center rounded-2xl bg-white/5 border border-white/10 p-6">
+                  <Search className="w-8 h-8 mx-auto text-slate-500 mb-2 opacity-50" />
+                  <p className="text-sm font-bold text-white">No articles found</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {postSearch ? `No results for "${postSearch}".` : 'No articles in this category.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPostSearch('');
+                      setPostCategory('all');
+                      setCurrentPage(1);
+                    }}
+                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1d9bf0]/15 text-[#1d9bf0] text-xs font-bold hover:bg-[#1d9bf0]/25 transition-all"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              )}
+
+              {!loading && paginatedPosts.map(post => {
+                const theme = getNicheTheme(post.category);
+                const Icon = theme.icon;
+                const isEditing = editingId === post.id;
+                const isHighlighted = highlightedPostId === post.id;
+
+                return (
+                  <div
+                    key={post.id}
+                    className={`group relative rounded-2xl border transition-all duration-200 p-3.5 shadow-sm ${
+                      isEditing
+                        ? 'bg-[#14233c] border-[#1d9bf0] shadow-[0_0_15px_rgba(29,155,240,0.3)] ring-1 ring-[#1d9bf0]'
+                        : isHighlighted
+                        ? 'bg-[#152a3a] border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.4)] animate-pulse'
+                        : 'bg-white/5 dark:bg-[#15202b] border-white/10 hover:border-cyan-500/40 hover:bg-white/[0.08] hover:translate-x-1'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${theme.badge}`}>
+                            <Icon className="w-2.5 h-2.5" />
+                            {theme.label}
+                          </span>
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${
+                            post.published ? 'text-emerald-400' : 'text-slate-400'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${post.published ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                            {post.published ? copy.published : copy.draft}
+                          </span>
+                        </div>
+
+                        <h3 className="font-bold text-slate-900 dark:text-white text-sm leading-snug line-clamp-2 group-hover:text-cyan-300 transition-colors">
+                          {highlightMatch(post.title, postSearch)}
+                        </h3>
+
+                        <p className="text-[11px] text-[#536471] dark:text-[#8899a6] mt-1 truncate">
+                          /blog/{post.slug}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => edit(post)}
+                          title="Edit post"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#1d9bf0]/10 hover:bg-[#1d9bf0] text-[#1d9bf0] hover:text-white text-xs font-bold transition-all shadow-sm"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <a
+                          href={`/blog/${encodeURIComponent(post.slug)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="View live post"
+                          className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => void onDelete(post)}
+                          aria-label={`Delete ${post.title}`}
+                          title="Delete post"
+                          className="p-1.5 rounded-xl text-red-500 hover:text-white hover:bg-red-500/20 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="pt-3 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                <span className="text-slate-400 text-[11px]">
+                  Page <strong className="text-white">{safeCurrentPage}</strong> of <strong className="text-white">{totalPages}</strong>
+                </span>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage <= 1}
+                    onClick={() => setCurrentPage(1)}
+                    title="First page"
+                    className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronsLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage <= 1}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    title="Previous page"
+                    className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  {getPageNumbers(safeCurrentPage, totalPages).map((p, idx) => {
+                    if (p === '...') {
+                      return (
+                        <span key={`ellipsis-${idx}`} className="px-2 text-slate-500 font-bold text-xs select-none">
+                          ...
+                        </span>
+                      );
+                    }
+                    const pageNum = p as number;
+                    const isCurrent = pageNum === safeCurrentPage;
+                    return (
+                      <button
+                        key={`page-${pageNum}`}
+                        type="button"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-bold transition-all duration-150 ${
+                          isCurrent
+                            ? 'bg-gradient-to-r from-[#1d9bf0] to-[#007bff] text-white shadow-[0_2px_8px_rgba(29,155,240,0.5)] scale-105'
+                            : 'bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage >= totalPages}
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    title="Next page"
+                    className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage >= totalPages}
+                    onClick={() => setCurrentPage(totalPages)}
+                    title="Last page"
+                    className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <ChevronsRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </aside>
         </div>
       )}
