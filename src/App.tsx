@@ -204,6 +204,10 @@ export default function App() {
       },
       instagram: titles['/instagram-video-downloader'],
       facebook: titles['/facebook-video-downloader'],
+      tiktok: titles['/tiktok-downloader'],
+      threads: titles['/threads-downloader'],
+      guides: titles['/guides'],
+      faq: titles['/faq'],
       terms: titles['/terms'],
       privacy: titles['/privacy'],
     };
