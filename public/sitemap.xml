@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Final 2026-11-27: 44 URLs = 10 static pages (incl. terms/privacy) + 34 articles. Built from sitemap-2026-11-27.xml + artists-quitting (Nov 26 21:00) + terms/privacy (lastmod 2026-11-26). -->
+<!-- Generated 2026-11-28 by scripts/generate-sitemap.mjs: 10 static pages + 36 articles = 46 URLs. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://downmyvid.com/</loc>
-    <lastmod>2026-11-27</lastmod>
+    <lastmod>2026-11-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -45,7 +45,7 @@
   </url>
   <url>
     <loc>https://downmyvid.com/blog</loc>
-    <lastmod>2026-11-27</lastmod>
+    <lastmod>2026-11-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -164,13 +164,13 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://downmyvid.com/blog/bitcoin-etf-outflows-hit-record-4-71b-november</loc>
+    <loc>https://downmyvid.com/blog/instagram-edits-hits-ipad-bigger-canvas</loc>
     <lastmod>2026-11-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://downmyvid.com/blog/instagram-edits-hits-ipad-bigger-canvas</loc>
+    <loc>https://downmyvid.com/blog/bitcoin-etf-outflows-hit-record-4-71b-november</loc>
     <lastmod>2026-11-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -188,13 +188,13 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://downmyvid.com/blog/take-two-kills-gta-6-pc-port-project-leonida</loc>
+    <loc>https://downmyvid.com/blog/tariffs-wipe-out-mondays-market-rally-in-a-day</loc>
     <lastmod>2026-11-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://downmyvid.com/blog/tariffs-wipe-out-mondays-market-rally-in-a-day</loc>
+    <loc>https://downmyvid.com/blog/take-two-kills-gta-6-pc-port-project-leonida</loc>
     <lastmod>2026-11-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -262,6 +262,18 @@
   <url>
     <loc>https://downmyvid.com/blog/tiktok-likeness-detection-rolls-out-globally</loc>
     <lastmod>2026-11-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/google-admits-open-web-in-rapid-decline</loc>
+    <lastmod>2026-11-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://downmyvid.com/blog/openai-countersues-apple-ai-device-trade-secrets-fight</loc>
+    <lastmod>2026-11-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
