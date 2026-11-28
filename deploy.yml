@@ -1,0 +1,37 @@
+name: Deploy to Firebase Hosting
+
+# Deploys the site automatically, so nobody has to run the terminal deploy
+# by hand. The build step runs `npm run build`, which triggers the
+# `prebuild` hook (scripts/generate-sitemap.mjs) that rebuilds
+# public/sitemap.xml from the live Firestore articles first.
+on:
+  push:
+    branches: [main]
+  schedule:
+    # 21:30 UTC (22:30 CET) every day, after the last blog slot,
+    # so the day's articles land in the sitemap and on the live site
+    # even when no code changed.
+    - cron: '30 21 * * *'
+  workflow_dispatch:
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: https://downmyvid.saddikos97.workers.dev
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: live
+          projectId: gen-lang-client-0451556993
